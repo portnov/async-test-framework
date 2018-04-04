@@ -1,0 +1,6 @@
+.stack-work/
+async.cabal
+*~
+*.hi
+*.o
+*.swp
