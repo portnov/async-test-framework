@@ -2,15 +2,18 @@
 module Connection where
 
 import Control.Monad
-import Control.Exception
-import Control.Distributed.Process
+-- import Control.Exception.Lifted (bracket)
+import Control.Monad.Catch (bracket)
+import Control.Concurrent
+import Control.Distributed.Process hiding (bracket)
+import Control.Distributed.Process.MonadBaseControl () -- instances only
 import Data.Binary
 import Data.Word
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as L
 import Network.Socket hiding (recv)
 import Network.Socket.ByteString.Lazy (recv, sendAll)
-import Control.Concurrent
+import Text.Printf
 
 import Types
 
@@ -34,7 +37,7 @@ instance IsFrame SimpleFrame where
     putStrLn $ "waiting for message frame on " ++ show sock
     lenStr <- readN 2 sock
     let len = decode (lenStr) :: Word16
-    putStrLn $ "reading bytes: " ++ show len
+    printf "reading bytes: %s from: %s\n" (show len) (show sock)
     bin <- readN len sock
     --B.putStrLn bin
     let msg = decode $ bin 
@@ -45,7 +48,7 @@ instance IsFrame SimpleFrame where
     let bin = encode msg
     let len = fromIntegral (L.length bin) :: Word16
     let lenStr = encode len
-    putStrLn $ "sending bytes: " ++ show len
+    printf "sending bytes: %s to: %s\n" (show len) (show sock)
     sendAll sock $ lenStr `L.append` bin
 
 readMessage :: (IsMessage m, IsFrame f) => ExtPort -> f -> IO m
@@ -89,24 +92,30 @@ getServerAddr host port = do
   listen sock 100
   putStrLn $ "Listening: " ++ show port
   (conn, _) <- accept sock
-  putStrLn $ "Accepted: server port #" ++ show port
-  return $ ServerPort port conn sock
+  let extPort = ServerPort port conn sock
+  putStrLn $ "Accepted: server port #" ++ show extPort
+  return extPort
 
 serverConnection :: String -> PortNumber -> (ExtPort -> Process ()) -> Process ()
-serverConnection host portNumber proc = do
-  sock <- liftIO $ do
-    addrinfos <- getAddrInfo (Just (defaultHints {addrFlags = [AI_PASSIVE]})) Nothing (Just $ show portNumber)
-    let serveraddr = head addrinfos
-    sock <- socket (addrFamily serveraddr) Stream defaultProtocol
-    bind sock (addrAddress serveraddr)
-    listen sock 100
-    putStrLn $ "Listening: " ++ show portNumber
-    return sock
-  forever $ do
-    (conn, _) <- liftIO $ accept sock
-    liftIO $ putStrLn $ "Accepted: server port #" ++ show portNumber
-    let extPort = ServerPort portNumber conn sock
-    proc extPort
+serverConnection host portNumber proc = bracket init done loop
+  where
+    init = liftIO $ do
+      addrinfos <- getAddrInfo (Just (defaultHints {addrFlags = [AI_PASSIVE]})) Nothing (Just $ show portNumber)
+      let serveraddr = head addrinfos
+      sock <- socket (addrFamily serveraddr) Stream defaultProtocol
+      bind sock (addrAddress serveraddr)
+      listen sock 100
+      putStrLn $ "Listening: " ++ show portNumber
+      return sock
+
+    done sock = liftIO $ close sock
+
+    loop sock = 
+      forever $ do
+        (conn, _) <- liftIO $ accept sock
+        let extPort = ServerPort portNumber conn sock
+        liftIO $ putStrLn $ "Accepted: server port #" ++ show extPort
+        spawnLocal $ proc extPort
 
 clientConnection :: String -> PortNumber -> (ExtPort -> Process ()) -> Process ()
 clientConnection host portNumber proc = do

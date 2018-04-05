@@ -29,7 +29,11 @@ dependencies:
 - iso8583-bitmaps
 - stm >= 2.4
 - distributed-process
+- distributed-process-monad-control
+- lifted-base
 - network-transport-tcp
+- random
+- exceptions
 
 executables:
   async-exe:

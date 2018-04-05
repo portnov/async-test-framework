@@ -24,4 +24,5 @@ packages:
 # (e.g., acme-missiles-0.3)
 extra-deps:
   - iso8583-bitmaps-0.1.1.0
+    #  - lifted-base-0.2.3.12
 
