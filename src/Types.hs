@@ -1,4 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE StandaloneDeriving #-}
 
 module Types where
 
@@ -9,11 +11,16 @@ import Control.Distributed.Process hiding (bracket, mask, catch)
 import Control.Monad.Catch 
 import qualified Data.Map as M
 import qualified Data.Text as T
+import qualified Data.Text.Lazy as TL
+import Data.Typeable
 import Data.Binary
 import qualified Data.ByteString.Lazy as L
 import Network.Socket
 import System.Log.Heavy
+import System.Log.Heavy.Instances.Binary
+import System.Log.Heavy.Instances.Throw
 import Data.Text.Format.Heavy
+import GHC.Generics
 
 data ExtPort =
   ClientPort PortNumber Socket
@@ -44,20 +51,12 @@ data ConnectionPool = ConnectionPool {
     cpPorts :: M.Map PortNumber ExtPort
   }
 
-instance MonadThrow m => MonadThrow (LoggingT m) where
-  throwM e = LoggingT $ lift $ throwM e
+data SimpleLogMessage = SimpleLogMessage Level (Either String ProcessId) TL.Text
+  deriving (Eq, Show, Typeable, Generic)
 
-instance MonadCatch m => MonadCatch (LoggingT m) where
-  catch (LoggingT (ReaderT m)) c = LoggingT $ ReaderT $ \r -> m r `catch` \e -> runLoggingT (c e) r
+deriving instance Typeable LogMessage
 
-instance MonadMask m => MonadMask (LoggingT m) where
-  mask a = LoggingT $ ReaderT $ \lts -> mask $ \u -> runLoggingT (a $ q u) lts
-    where q :: (m a -> m a) -> LoggingT m a -> LoggingT m a
-          q u (LoggingT (ReaderT b)) = LoggingT (ReaderT (u . b))
-
-  uninterruptibleMask a = LoggingT $ ReaderT $ \lts -> uninterruptibleMask $ \u -> runLoggingT (a $ q u) lts
-    where q :: (m a -> m a) -> LoggingT m a -> LoggingT m a
-          q u (LoggingT (ReaderT b)) = LoggingT (ReaderT (u . b))
+instance Binary SimpleLogMessage
 
 type AProcess a = LoggingT Process a
 

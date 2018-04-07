@@ -1,10 +1,10 @@
 name:                async-tos
 version:             0.1.0.0
-github:              "githubuser/async"
+github:              "portnov/async-tos"
 license:             BSD3
-author:              "Author name here"
-maintainer:          "example@example.com"
-copyright:           "2018 Author name here"
+author:              "Ilya Portnov"
+maintainer:          "portnov84@rambler.ru"
+copyright:           "2018 Ilya Portnov"
 
 extra-source-files:
 - README.md
@@ -29,14 +29,18 @@ dependencies:
 - binary >= 0.7
 - iso8583-bitmaps
 - stm >= 2.4
+- template-haskell >= 2.12
+- th-lift
 - distributed-process
 - distributed-process-monad-control
 - lifted-base
 - network-transport-tcp
 - random
 - exceptions
-- heavy-logger >= 0.3.1.0
-- text-format-heavy >= 0.1.5.0
+- heavy-logger >= 0.3.2.0
+- text-format-heavy >= 0.1.5.1
+- heavy-logger-instances >= 0.2.0.0
+- monad-logger >= 0.3.22
 
 executables:
   async-exe:
