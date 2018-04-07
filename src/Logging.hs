@@ -33,7 +33,9 @@ import Types
 import Connection
 import Pool
 
-logSettings path = (defFileSettings path) {lsFormat = "{time} [{level}] {source} {process} {thread}: {message}\n"}
+logSettings path =
+  filtering defaultLogFilter $
+    (defFileSettings path) {lsFormat = "{time} [{level}] {source} {process} {thread}: {message}\n"}
 
 putMessage :: Level -> Q Exp
 putMessage level = [| \msg vars -> do

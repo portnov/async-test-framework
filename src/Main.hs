@@ -10,6 +10,7 @@ import Tests
 main :: IO ()
 main = do
   [arg] <- getArgs
+  let cfg = ProcessConfig [] 9090 9100 4
   case arg of
-    "client" -> runClient 9090 9100
-    "server" -> runServer 9090 9100
+    "client" -> runClient cfg
+    "server" -> runServer cfg

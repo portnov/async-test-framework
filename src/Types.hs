@@ -59,22 +59,33 @@ deriving instance Typeable LogMessage
 
 instance Binary SimpleLogMessage
 
-type AProcess a = ReaderT LogContext Process a
+deriving instance Generic PortNumber
 
-instance HasLogContext (ReaderT LogContext Process) where
-  getLogContext = ask
+instance Binary PortNumber
 
-  withLogContext frame = local (\context -> frame : context)
+data ProcessConfig = ProcessConfig {
+    pcContext :: LogContext,
+    pcMinPort :: PortNumber,
+    pcMaxPort :: PortNumber,
+    pcWorkersCount :: Int
+  }
+
+type AProcess a = ReaderT ProcessConfig Process a
+
+instance HasLogContext (ReaderT ProcessConfig Process) where
+  getLogContext = asks pcContext
+
+  withLogContext frame = local (\cfg -> cfg {pcContext = frame : pcContext cfg})
 
 spawnAProcess :: AProcess () -> AProcess ProcessId
 spawnAProcess proc = do
-  lts <- ask
+  cfg <- ask
   lift $ spawnLocal $ do
       self <- getSelfPid
       let frame = LogContextFrame [("thread", Variable (show self))] noChange
-      let lts' = frame : lts
-      runReaderT proc lts'
+      let cfg' = cfg {pcContext = frame : pcContext cfg}
+      runReaderT proc cfg'
 
-runAProcess :: AProcess () -> Process ()
-runAProcess proc = runReaderT proc []
+runAProcess :: ProcessConfig -> AProcess () -> Process ()
+runAProcess cfg proc = runReaderT proc cfg
 
