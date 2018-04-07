@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE FlexibleInstances #-}
 
 module Types where
 
@@ -58,14 +59,22 @@ deriving instance Typeable LogMessage
 
 instance Binary SimpleLogMessage
 
-type AProcess a = LoggingT Process a
+type AProcess a = ReaderT LogContext Process a
+
+instance HasLogContext (ReaderT LogContext Process) where
+  getLogContext = ask
+
+  withLogContext frame = local (\context -> frame : context)
 
 spawnAProcess :: AProcess () -> AProcess ProcessId
 spawnAProcess proc = do
-  lts <- LoggingT ask
+  lts <- ask
   lift $ spawnLocal $ do
       self <- getSelfPid
       let frame = LogContextFrame [("thread", Variable (show self))] noChange
-      let lts' = lts {ltsContext = frame : ltsContext lts}
-      runLoggingT proc lts'
+      let lts' = frame : lts
+      runReaderT proc lts'
+
+runAProcess :: AProcess () -> Process ()
+runAProcess proc = runReaderT proc []
 

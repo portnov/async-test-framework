@@ -97,7 +97,7 @@ getServerAddr host port = do
   putStrLn $ "Accepted: server port #" ++ show extPort
   return extPort
 
-serverConnection :: String -> PortNumber -> (ExtPort -> Process ()) -> Process ()
+serverConnection :: String -> PortNumber -> (ExtPort -> AProcess ()) -> AProcess ()
 serverConnection host portNumber proc = bracket init done loop
   where
     init = liftIO $ do
@@ -116,10 +116,10 @@ serverConnection host portNumber proc = bracket init done loop
         (conn, _) <- liftIO $ accept sock
         let extPort = ServerPort portNumber conn sock
         liftIO $ putStrLn $ "Accepted: server port #" ++ show extPort
-        spawnLocal $ proc extPort
+        spawnAProcess $ proc extPort
         -- lift $ spawnLocal $ proc extPort
 
-clientConnection :: String -> PortNumber -> (ExtPort -> Process ()) -> Process ()
+clientConnection :: String -> PortNumber -> (ExtPort -> AProcess ()) -> AProcess ()
 clientConnection host portNumber proc = do
   extPort <- liftIO $ getClientAddr host portNumber
   proc extPort

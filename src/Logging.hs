@@ -33,14 +33,15 @@ import Types
 import Connection
 import Pool
 
-logSettings path = (defFileSettings path) {lsFormat = "{time} [{level}] {source} {process} {thread}: {message}"}
+logSettings path = (defFileSettings path) {lsFormat = "{time} [{level}] {source} {process} {thread}: {message}\n"}
 
 putMessage :: Level -> Q Exp
 putMessage level = [| \msg vars -> do
+  context <- getLogContext
   let loc = $(qLocation >>= liftLoc)
       src = splitDots (loc_module loc)
-      message = LogMessage $(TH.lift level) src loc msg vars []
-  nsend "logger" message
+      message = LogMessage $(TH.lift level) src loc msg vars context
+  lift $ nsend "logger" message
   |]
 
 trace :: Q Exp
@@ -91,8 +92,10 @@ reportError = putMessage error_level
 fatal :: Q Exp
 fatal = putMessage fatal_level
 
-logWriter :: String -> FilePath -> Process()
-logWriter role path = do
+logWriter :: FilePath -> Process()
+logWriter path = do
+    self <- getSelfPid
+    reregister "logger" self
     let settings = logSettings path
     withLoggingT (LoggingSettings settings) $ forever $ do
       logger <- getLogger
