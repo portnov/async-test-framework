@@ -44,7 +44,7 @@ instance IsMessage MyMessage where
 
 reader :: ExtPort -> AProcess ()
 reader port = do
-    $info "hello from reader: {}" (Single $ show port)
+    $debug "hello from reader: {}" (Single $ show port)
     loop `finally` closeServerConnection
   where
     loop = forever $ do
@@ -65,7 +65,7 @@ writer port = do
   where
     loop =
         forever $ do
-          $info "hello from writer: {}" (Single $ show port)
+          $debug "hello from writer: {}" (Single $ show port)
           msg <- lift expect
           liftIO $ writeMessage port SimpleFrame (msg :: MyMessage)
 
@@ -78,11 +78,11 @@ clientWorker :: [PortNumber] -> Int -> AProcess ()
 clientWorker ports base = do
   self <- lift getSelfPid
   lift $ register "worker" self
-  $info "hello from client worker" ()
+  $debug "hello from client worker" ()
   forM_ [1 .. 10] $ \id -> do
     let key = (base + (2*id)) :: Int
     let msg = MyMessage False key "request"
-    $info "client request: {}" (Single $ show msg)
+    -- $debug "client request: {}" (Single $ show msg)
     let n = length ports
     idx <- liftIO $ randomRIO (0,n-1)
     let portNumber = (ports !! idx)
@@ -95,7 +95,7 @@ serverWorker :: [PortNumber] -> AProcess ()
 serverWorker ports = do
   self <- lift getSelfPid
   lift $ register "worker" self
-  $info "hello from server worker" ()
+  $debug "hello from server worker" ()
   forever $ do
     msg <- lift expect
     $info "server worker: request received: {}" (Single $ show (msg :: MyMessage))
@@ -103,6 +103,8 @@ serverWorker ports = do
     let n = length ports
     idx <- liftIO $ randomRIO (0,n-1)
     let portNumber = (ports !! idx)
+    delay <- liftIO $ randomRIO (0, 5)
+    liftIO $ threadDelay $ delay * 100 * 1000
     lift $ nsend ("writer:"++show portNumber) msg'
     $info "server worker: response sent" ()
 
@@ -121,15 +123,15 @@ runClient minPort maxPort = do
             spawnAProcess $ clientConnection localhost portNumber $ \extPort -> do
               w <- spawnAProcess (writer extPort)
               lift $ link w
-              $info "client spawned writer" ()
+              $debug "client spawned writer" ()
               r <- spawnAProcess (reader extPort)
               lift $ link r
-              $info "client spawned reader" ()
+              $debug "client spawned reader" ()
               return ()
 
         liftIO $ threadDelay $ 100*1000
 
-        $info "hello" ()
+        $debug "hello" ()
         spawnAProcess $
             clientWorker [minPort .. maxPort] 100 
         return ()
@@ -154,10 +156,10 @@ runServer minPort maxPort = do
             spawnAProcess $ serverConnection localhost portNumber $ \extPort -> do
               r <- spawnAProcess (reader extPort)
               lift $ link r
-              $info "server spawned reader: {}" (Single $ show extPort)
+              $debug "server spawned reader: {}" (Single $ show extPort)
               w <- spawnAProcess (writer extPort)
               lift $ link w
-              $info "server spawned writer: {}" (Single $ show extPort)
+              $debug "server spawned writer: {}" (Single $ show extPort)
               return ()
 
   putStrLn "hit enter..."
