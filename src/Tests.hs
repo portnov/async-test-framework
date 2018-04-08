@@ -15,7 +15,7 @@ import Data.Binary
 import Data.Maybe
 import qualified Data.ByteString.Lazy as L
 import Data.String
-import Network.Socket
+import Network.Socket hiding (send)
 import Network.Transport.TCP (createTransport, defaultTCPParameters)
 import GHC.Generics
 import System.Random
@@ -28,6 +28,7 @@ import Types
 import Connection
 import Pool
 import Logging
+import Matcher
 
 data MyMessage = MyMessage {
     mIsResponse :: Bool
@@ -49,23 +50,27 @@ askPortsCount = do
   maxPort <- asks pcMaxPort
   return $ fromIntegral $ maxPort - minPort + 1
 
-sendWorker :: ExtPort -> MyMessage -> AProcess ()
-sendWorker srcPort msg = do
+sendWorker :: ExtPort -> Maybe ProcessId -> MyMessage -> AProcess ()
+sendWorker srcPort Nothing msg = do
   count <- asks pcWorkersCount
   idx <- liftIO $ randomRIO (0, count-1)
   let name = "worker:" ++ show idx
   lift $ nsend name (getPortNumber srcPort, msg)
+sendWorker srcPort (Just worker) msg = do
+  lift $ send worker (getPortNumber srcPort, msg)
 
-sendWriter :: Maybe ExtPort -> MyMessage -> AProcess ()
+sendWriter :: Maybe PortNumber -> MyMessage -> AProcess ()
 sendWriter mbPort msg = do
   port <- case mbPort of
-           Just extPort -> return $ getPortNumber extPort
+           Just srcPort -> return srcPort
            Nothing -> do
               minPort <- asks pcMinPort
               maxPort <- asks pcMaxPort
               let count = fromIntegral $ maxPort - minPort + 1
               idx <- liftIO $ randomRIO (0, count-1)
               return $ minPort + fromIntegral (idx :: Int)
+  when (not $ mIsResponse msg) $ do
+      lift $ registerRq port (mKey msg)
   let name = "writer:" ++ show port
   lift $ nsend name msg
 
@@ -74,9 +79,17 @@ reader port = do
     $debug "hello from reader: {}" (Single $ show port)
     loop `finally` closeServerConnection
   where
+    loop :: AProcess ()
     loop = forever $ do
             msg <- liftIO $ readMessage port SimpleFrame
-            sendWorker port msg
+            if mIsResponse msg
+              then do
+                mbRequester <- lift $ whoSentRq (getPortNumber port) (mKey msg)
+                case mbRequester of
+                  Nothing -> 
+                    $reportError "Received response #{} for request that we did not send, skipping" (Single $ mKey msg)
+                  Just requester -> sendWorker port (Just requester) msg
+              else sendWorker port Nothing msg
 
     closeServerConnection =
       case port of
@@ -102,8 +115,18 @@ writer port = do
         ServerPort _ conn _ -> liftIO $ close conn
         _ -> return ()
 
-clientWorker :: Int -> AProcess ()
-clientWorker myIndex = do
+receiveResponse :: Int -> AProcess MyMessage
+receiveResponse key =
+    lift $ receiveWait [
+      matchIf isSuitable (return . snd)
+    ]
+  where
+    isSuitable :: (PortNumber, MyMessage) -> Bool
+    isSuitable (_, msg) =
+      mIsResponse msg && mKey msg == key
+
+generator :: Int -> AProcess ()
+generator myIndex = do
   self <- lift getSelfPid
   let myName = "worker:" ++ show myIndex
   lift $ register myName self
@@ -113,24 +136,26 @@ clientWorker myIndex = do
     let key = (myIndex*100 + (2*id)) :: Int
     let msg = MyMessage False key "request"
     sendWriter Nothing msg
-    $info "client worker #{}: sent request #{}" (myIndex, key)
-    (_, msg') <- lift expect :: AProcess (PortNumber, MyMessage)
-    $info "client worker #{}: response received: #{}" (myIndex, mKey msg')
+    $info "sent request #{}" (Single key)
+    msg' <- receiveResponse (mKey msg)
+    when (mKey msg' /= mKey msg) $
+        fail "Suddenly received incorrect reply"
+    $info "response received: #{}" (Single $ mKey msg')
 
-serverWorker :: Int -> AProcess ()
-serverWorker myIndex = do
+processor :: Int -> AProcess ()
+processor myIndex = do
   self <- lift getSelfPid
   let myName = "worker:" ++ show myIndex
   lift $ register myName self
   $debug "hello from server worker #{}" (Single myIndex)
   forever $ do
-    (_,msg) <- lift expect :: AProcess (PortNumber, MyMessage)
-    $info "server worker #{}: request received: #{}" (myIndex, mKey msg)
+    (srcPort, msg) <- lift expect :: AProcess (PortNumber, MyMessage)
+    $info "request received: #{}" (Single $ mKey msg)
     let msg' = msg {mIsResponse = True, mPayload = "response"}
-    delay <- liftIO $ randomRIO (0, 5)
+    delay <- liftIO $ randomRIO (0, 10)
     liftIO $ threadDelay $ delay * 100 * 1000
-    sendWriter Nothing msg'
-    $info "server worker #{}: response sent: #{}" (myIndex, mKey msg)
+    sendWriter (Just srcPort) msg'
+    $info "response sent: #{}" (Single $ mKey msg)
 
 localhost = "127.0.0.1"
 
@@ -147,11 +172,14 @@ runClient cfg = do
     spawnLocal $ logWriter "client.log"
     runAProcess cfg $ withLogVariable "process" ("client" :: String) $ do
         forM_ [minPort .. maxPort] $ \portNumber -> do
-            spawnAProcess $ clientConnection localhost portNumber $ \extPort -> do
-              w <- spawnAProcess (writer extPort)
+            spawnAProcess "port" portNumber $ clientConnection localhost portNumber $ \extPort -> do
+              let portNumber = getPortNumber extPort
+              m <- lift $ spawnLocal (matcher portNumber)
+              lift $ link m
+              w <- spawnAProcess "writer" portNumber (writer extPort)
               lift $ link w
               $debug "client spawned writer" ()
-              r <- spawnAProcess (reader extPort)
+              r <- spawnAProcess "reader" portNumber (reader extPort)
               lift $ link r
               $debug "client spawned reader" ()
               return ()
@@ -161,7 +189,7 @@ runClient cfg = do
         $debug "hello" ()
         nWorkers <- asks pcWorkersCount
         forM_ [0 .. nWorkers-1] $ \idx ->
-            spawnAProcess $ clientWorker idx
+            spawnAProcess "generator" idx $ generator idx
         return ()
 
   putStrLn "hit enter..."
@@ -181,16 +209,19 @@ runServer cfg = do
     runAProcess cfg $ withLogVariable "process" ("server" :: String) $ do
         nWorkers <- asks pcWorkersCount
         forM_ [0 .. nWorkers-1] $ \idx ->
-            spawnAProcess $ serverWorker idx
+            spawnAProcess "processor" idx $ processor idx
 
         liftIO $ threadDelay $ 100*1000
           
         forM_ [minPort .. maxPort] $ \portNumber -> do
-            spawnAProcess $ serverConnection localhost portNumber $ \extPort -> do
-              r <- spawnAProcess (reader extPort)
+            spawnAProcess "port" portNumber $ serverConnection localhost portNumber $ \extPort -> do
+              let portNumber = getPortNumber extPort
+              m <- lift $ spawnLocal (matcher portNumber)
+              lift $ link m
+              r <- spawnAProcess "reader" portNumber (reader extPort)
               lift $ link r
               $debug "server spawned reader: {}" (Single $ show extPort)
-              w <- spawnAProcess (writer extPort)
+              w <- spawnAProcess "writer" portNumber (writer extPort)
               lift $ link w
               $debug "server spawned writer: {}" (Single $ show extPort)
               return ()

@@ -29,7 +29,7 @@ dependencies:
 - binary >= 0.7
 - iso8583-bitmaps
 - stm >= 2.4
-- template-haskell >= 2.12
+- template-haskell >= 2.12.0.0
 - th-lift
 - distributed-process
 - distributed-process-monad-control

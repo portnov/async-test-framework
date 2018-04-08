@@ -1,3 +1,5 @@
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Connection where
 
@@ -15,8 +17,10 @@ import qualified Data.ByteString.Lazy as L
 import Network.Socket hiding (recv)
 import Network.Socket.ByteString.Lazy (recv, sendAll)
 import Text.Printf
+import Data.Text.Format.Heavy
 
 import Types
+import Logging
 
 data SimpleFrame = SimpleFrame
   deriving (Eq, Show)
@@ -77,7 +81,7 @@ closePort (ServerPort p conn sock) = do
 
 getClientAddr host port = do
   addrinfos <- getAddrInfo Nothing (Just host) (Just $ show port)
-  putStrLn $ "AddrInfos: " ++ show addrinfos
+  -- putStrLn $ "AddrInfos: " ++ show addrinfos
   let serveraddr = head addrinfos
   sock <- socket (addrFamily serveraddr) Stream defaultProtocol
   putStrLn $ "Socket: " ++ show sock
@@ -115,9 +119,8 @@ serverConnection host portNumber proc = bracket init done loop
       forever $ do
         (conn, _) <- liftIO $ accept sock
         let extPort = ServerPort portNumber conn sock
-        liftIO $ putStrLn $ "Accepted: server port #" ++ show extPort
-        spawnAProcess $ proc extPort
-        -- lift $ spawnLocal $ proc extPort
+        $debug "Accepted: {}" (Single $ show extPort)
+        spawnAProcess "acceptor" extPort $ proc extPort
 
 clientConnection :: String -> PortNumber -> (ExtPort -> AProcess ()) -> AProcess ()
 clientConnection host portNumber proc = do

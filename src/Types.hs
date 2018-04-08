@@ -77,12 +77,16 @@ instance HasLogContext (ReaderT ProcessConfig Process) where
 
   withLogContext frame = local (\cfg -> cfg {pcContext = frame : pcContext cfg})
 
-spawnAProcess :: AProcess () -> AProcess ProcessId
-spawnAProcess proc = do
+spawnAProcess :: Show idx => String -> idx -> AProcess () -> AProcess ProcessId
+spawnAProcess name idx proc = do
   cfg <- ask
   lift $ spawnLocal $ do
       self <- getSelfPid
-      let frame = LogContextFrame [("thread", Variable (show self))] noChange
+      let frame = LogContextFrame [
+                    ("pid", Variable (show self)),
+                    ("thread", Variable name),
+                    ("index", Variable (show idx))
+                  ] noChange
       let cfg' = cfg {pcContext = frame : pcContext cfg}
       runReaderT proc cfg'
 

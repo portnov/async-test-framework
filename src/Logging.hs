@@ -10,6 +10,7 @@ import Control.Monad.Logger (liftLoc, defaultLoc)
 import Control.Concurrent
 import Control.Distributed.Process hiding (bracket, finally)
 import Control.Distributed.Process.Node
+import Control.Distributed.Process.MonadBaseControl () -- instances only
 import Control.Monad.Catch (bracket, finally)
 import Data.Binary
 import Data.Maybe
@@ -30,12 +31,10 @@ import Language.Haskell.TH.Syntax (qLocation)
 import qualified Language.Haskell.TH.Lift as TH
 
 import Types
-import Connection
-import Pool
 
 logSettings path =
   filtering defaultLogFilter $
-    (defFileSettings path) {lsFormat = "{time} [{level}] {source} {process} {thread}: {message}\n"}
+    (defFileSettings path) {lsFormat = "{time} [{level}] {source} {process} {thread}#{index}: {message}\n"}
 
 putMessage :: Level -> Q Exp
 putMessage level = [| \msg vars -> do
