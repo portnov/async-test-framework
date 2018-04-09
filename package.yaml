@@ -41,6 +41,9 @@ dependencies:
 - text-format-heavy >= 0.1.5.1
 - heavy-logger-instances >= 0.2.0.0
 - monad-logger >= 0.3.22
+- ekg >= 0.4
+- ekg-core >= 0.1
+- monad-metrics >= 0.2.1.1
 
 executables:
   async-exe:

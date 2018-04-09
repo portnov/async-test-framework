@@ -11,6 +11,7 @@ import Control.Concurrent
 import Control.Distributed.Process hiding (bracket, finally)
 import Control.Distributed.Process.Node
 import Control.Monad.Catch (bracket, finally)
+import qualified Control.Monad.Metrics as Metrics
 import Data.Binary
 import Data.Maybe
 import qualified Data.ByteString.Lazy as L
@@ -84,12 +85,15 @@ reader port = do
             msg <- liftIO $ readMessage port SimpleFrame
             if mIsResponse msg
               then do
+                Metrics.increment "reader.received.requests"
                 mbRequester <- lift $ whoSentRq (getPortNumber port) (mKey msg)
                 case mbRequester of
                   Nothing -> 
                     $reportError "Received response #{} for request that we did not send, skipping" (Single $ mKey msg)
                   Just requester -> sendWorker port (Just requester) msg
-              else sendWorker port Nothing msg
+              else do
+                  Metrics.increment "reader.received.responses"
+                  sendWorker port Nothing msg
 
     closeServerConnection =
       case port of
@@ -108,6 +112,7 @@ writer port = do
         forever $ do
           $debug "hello from writer: {}" (Single $ show port)
           msg <- lift expect
+          Metrics.increment "writer.sent.messages"
           liftIO $ writeMessage port SimpleFrame (msg :: MyMessage)
 
     closeServerConnection =
@@ -132,15 +137,16 @@ generator myIndex = do
   lift $ register myName self
 
   $debug "hello from client worker #{}" (Single myIndex)
-  forM_ [1 .. 40] $ \id -> do
+  forM_ [1 .. 200] $ \id -> do
     let key = (myIndex*100 + (2*id)) :: Int
     let msg = MyMessage False key "request"
-    sendWriter Nothing msg
-    $info "sent request #{}" (Single key)
-    msg' <- receiveResponse (mKey msg)
-    when (mKey msg' /= mKey msg) $
-        fail "Suddenly received incorrect reply"
-    $info "response received: #{}" (Single $ mKey msg')
+    Metrics.timed "generator.requests.duration" $ do
+        sendWriter Nothing msg
+        $info "sent request #{}" (Single key)
+        msg' <- receiveResponse (mKey msg)
+        when (mKey msg' /= mKey msg) $
+            fail "Suddenly received incorrect reply"
+        $info "response received: #{}" (Single $ mKey msg')
 
 processor :: Int -> AProcess ()
 processor myIndex = do
@@ -149,13 +155,14 @@ processor myIndex = do
   lift $ register myName self
   $debug "hello from server worker #{}" (Single myIndex)
   forever $ do
-    (srcPort, msg) <- lift expect :: AProcess (PortNumber, MyMessage)
-    $info "request received: #{}" (Single $ mKey msg)
-    let msg' = msg {mIsResponse = True, mPayload = "response"}
-    delay <- liftIO $ randomRIO (0, 10)
-    liftIO $ threadDelay $ delay * 100 * 1000
-    sendWriter (Just srcPort) msg'
-    $info "response sent: #{}" (Single $ mKey msg)
+    Metrics.timed "processor.requests.duration" $ do
+      (srcPort, msg) <- lift expect :: AProcess (PortNumber, MyMessage)
+      $info "request received: #{}" (Single $ mKey msg)
+      let msg' = msg {mIsResponse = True, mPayload = "response"}
+      delay <- liftIO $ randomRIO (0, 10)
+      liftIO $ threadDelay $ delay * 100 * 1000
+      sendWriter (Just srcPort) msg'
+      $info "response sent: #{}" (Single $ mKey msg)
 
 localhost = "127.0.0.1"
 

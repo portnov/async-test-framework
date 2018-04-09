@@ -10,6 +10,7 @@ import Control.Concurrent
 import Control.Concurrent.STM
 import Control.Distributed.Process hiding (bracket, mask, catch)
 import Control.Monad.Catch 
+import qualified Control.Monad.Metrics as Metrics
 import qualified Data.Map as M
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as TL
@@ -65,6 +66,7 @@ instance Binary PortNumber
 
 data ProcessConfig = ProcessConfig {
     pcContext :: LogContext,
+    pcMetrics :: Metrics.Metrics,
     pcMinPort :: PortNumber,
     pcMaxPort :: PortNumber,
     pcWorkersCount :: Int
@@ -76,6 +78,9 @@ instance HasLogContext (ReaderT ProcessConfig Process) where
   getLogContext = asks pcContext
 
   withLogContext frame = local (\cfg -> cfg {pcContext = frame : pcContext cfg})
+
+instance Metrics.MonadMetrics (ReaderT ProcessConfig Process) where
+  getMetrics = asks pcMetrics
 
 spawnAProcess :: Show idx => String -> idx -> AProcess () -> AProcess ProcessId
 spawnAProcess name idx proc = do

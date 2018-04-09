@@ -4,13 +4,19 @@ import System.Environment
 
 import Types
 import Connection
-import Pool
 import Tests
+import Monitoring
+
+mkConfig :: Int -> IO ProcessConfig
+mkConfig port = do
+  metrics <- setupMetrics port
+  let cfg = ProcessConfig [] metrics 9090 9100 40
+  return cfg
 
 main :: IO ()
 main = do
   [arg] <- getArgs
-  let cfg = ProcessConfig [] 9090 9100 4
   case arg of
-    "client" -> runClient cfg
-    "server" -> runServer cfg
+    "client" -> runClient =<< mkConfig 8000
+    "server" -> runServer =<< mkConfig 8080
+
