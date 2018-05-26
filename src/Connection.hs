@@ -39,10 +39,10 @@ readN sz sock = go sz
 
 instance IsFrame SimpleFrame where
   recvMessage sock _ = do
-    putStrLn $ "waiting for message frame on " ++ show sock
+    -- putStrLn $ "waiting for message frame on " ++ show sock
     lenStr <- readN 2 sock
     let len = decode (lenStr) :: Word16
-    printf "reading bytes: %s from: %s\n" (show len) (show sock)
+    -- printf "reading bytes: %s from: %s\n" (show len) (show sock)
     bin <- readN len sock
     --B.putStrLn bin
     let msg = decode $ bin 
@@ -53,7 +53,7 @@ instance IsFrame SimpleFrame where
     let bin = encode msg
     let len = fromIntegral (L.length bin) :: Word16
     let lenStr = encode len
-    printf "sending bytes: %s to: %s\n" (show len) (show sock)
+    -- printf "sending bytes: %s to: %s\n" (show len) (show sock)
     sendAll sock $ lenStr `L.append` bin
 
 readMessage :: (IsMessage m, IsFrame f) => ExtPort -> f -> IO m
@@ -84,9 +84,9 @@ getClientAddr host port = do
   -- putStrLn $ "AddrInfos: " ++ show addrinfos
   let serveraddr = head addrinfos
   sock <- socket (addrFamily serveraddr) Stream defaultProtocol
-  putStrLn $ "Socket: " ++ show sock
+  -- putStrLn $ "Socket: " ++ show sock
   connect sock (addrAddress serveraddr)
-  putStrLn $ "Creating new client port #" ++ show port
+  -- putStrLn $ "Creating new client port #" ++ show port
   return $ ClientPort port sock
 
 getServerAddr host port = do

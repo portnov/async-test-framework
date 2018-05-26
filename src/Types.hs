@@ -67,7 +67,7 @@ class (IsFrame (ProtocolFrame proto), IsMessage (ProtocolMessage proto))
 
   makeLogonMsg :: ProtocolM (ProtocolState proto) (ProtocolMessage proto)
 
-  generateRq :: proto -> ProtocolM (ProtocolState proto) (ProtocolMessage proto)
+  generateRq :: proto -> Int -> ProtocolM (ProtocolState proto) (ProtocolMessage proto)
 
   processRq :: ProtocolMessage proto -> ProtocolM (ProtocolState proto) (ProtocolMessage proto)
 
@@ -107,8 +107,16 @@ data ProcessState st = ProcessState {
     psContext :: LogContext,
     psMetrics :: Metrics.Metrics,
     psConfig :: ProcessConfig,
+    psGeneratorEnabled :: Bool,
     psState :: st
   }
+
+data GeneratorCommand =
+    StartGenerator
+  | StopGenerator
+  deriving (Typeable, Generic)
+
+instance Binary GeneratorCommand
 
 type ProtocolM st a = StateT (ProcessState st) Process a
 
