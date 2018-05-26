@@ -101,7 +101,7 @@ getServerAddr host port = do
   putStrLn $ "Accepted: server port #" ++ show extPort
   return extPort
 
-serverConnection :: String -> PortNumber -> (ExtPort -> AProcess ()) -> AProcess ()
+serverConnection :: String -> PortNumber -> (ExtPort -> ProtocolM st ()) -> ProtocolM st ()
 serverConnection host portNumber proc = bracket init done loop
   where
     init = liftIO $ do
@@ -122,7 +122,7 @@ serverConnection host portNumber proc = bracket init done loop
         $debug "Accepted: {}" (Single $ show extPort)
         spawnAProcess "acceptor" extPort $ proc extPort
 
-clientConnection :: String -> PortNumber -> (ExtPort -> AProcess ()) -> AProcess ()
+clientConnection :: String -> PortNumber -> (ExtPort -> ProtocolM st ()) -> ProtocolM st ()
 clientConnection host portNumber proc = do
   extPort <- liftIO $ getClientAddr host portNumber
   proc extPort

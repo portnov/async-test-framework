@@ -32,17 +32,17 @@ import Connection
 import Pool
 import Logging
 
-data WhoSentRq = WhoSentRq ProcessId Int
+data WhoSentRq = WhoSentRq ProcessId MatchKey
   deriving (Typeable, Generic)
 
 instance Binary WhoSentRq
 
-data RegisterRq = RegisterRq ProcessId Int
+data RegisterRq = RegisterRq ProcessId MatchKey
   deriving (Typeable, Generic)
 
 instance Binary RegisterRq
 
-type MatcherState = IORef (M.Map Int ProcessId)
+type MatcherState = IORef (M.Map MatchKey ProcessId)
 
 matcher :: PortNumber -> Process ()
 matcher port = do
@@ -67,13 +67,13 @@ matcher port = do
     registerRq st (RegisterRq sender key) = do
       liftIO $ modifyIORef st $ \m -> M.insert key sender m
 
-registerRq :: PortNumber -> Int -> Process ()
+registerRq :: PortNumber -> MatchKey -> Process ()
 registerRq port key = do
   self <- getSelfPid
   let name = "matcher:" ++ show port
   nsend name (RegisterRq self key)
 
-whoSentRq :: PortNumber -> Int -> Process (Maybe ProcessId)
+whoSentRq :: PortNumber -> MatchKey -> Process (Maybe ProcessId)
 whoSentRq port key = do
   self <- getSelfPid
   let name = "matcher:" ++ show port

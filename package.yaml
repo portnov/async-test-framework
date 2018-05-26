@@ -1,6 +1,6 @@
 name:                async-test-framework
 version:             0.1.0.0
-github:              "portnov/async-test-framework
+github:              "portnov/async-test-framework"
 license:             BSD3
 author:              "Ilya Portnov"
 maintainer:          "portnov84@rambler.ru"
@@ -23,6 +23,7 @@ dependencies:
 - base >= 4.7 && < 5
 - containers
 - mtl
+- monad-control >= 1.0.2.2
 - network >= 2.6
 - bytestring >= 0.10
 - text >= 1.2

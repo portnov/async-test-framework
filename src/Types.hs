@@ -1,15 +1,22 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE Rank2Types #-}
 
 module Types where
 
 import Control.Monad.Reader
+import Control.Monad.State as St
+import Control.Monad.Trans.Control
+import Control.Monad.Catch 
 import Control.Concurrent
 import Control.Concurrent.STM
 import Control.Distributed.Process hiding (bracket, mask, catch)
-import Control.Monad.Catch 
 import qualified Control.Monad.Metrics as Metrics
 import qualified Data.Map as M
 import qualified Data.Text as T
@@ -31,7 +38,7 @@ data ExtPort =
 
 type MatchKey = L.ByteString
 
-class Binary m => IsMessage m where
+class (Binary m, Typeable m) => IsMessage m where
   isResponse :: m -> Bool
   isAdministrative :: m -> Bool
   getMatchKey :: m -> MatchKey
@@ -39,6 +46,30 @@ class Binary m => IsMessage m where
 class IsFrame f where
   recvMessage :: IsMessage m => Socket -> f -> IO m
   sendMessage :: IsMessage m => Socket -> f -> m -> IO ()
+
+class (Monad m, MonadIO m, HasLogContext m, Metrics.MonadMetrics m) => ProcessMonad m where
+  liftP :: Process a -> m a
+  askConfig :: m ProcessConfig
+  -- spawnP :: m () -> m ProcessId
+
+class (IsFrame (ProtocolFrame proto), IsMessage (ProtocolMessage proto))
+    => Protocol proto where
+  type ProtocolFrame proto
+  data ProtocolMessage proto
+  data ProtocolSettings proto
+  type ProtocolState proto
+
+  getFrame :: proto -> ProtocolM (ProtocolState proto) (ProtocolFrame proto)
+
+  -- initProtocol :: ProtocolSettings proto -> ProtocolM (ProtocolState proto) ()
+
+  initialState :: ProtocolSettings proto -> ProtocolState proto
+
+  makeLogonMsg :: ProtocolM (ProtocolState proto) (ProtocolMessage proto)
+
+  generateRq :: proto -> ProtocolM (ProtocolState proto) (ProtocolMessage proto)
+
+  processRq :: ProtocolMessage proto -> ProtocolM (ProtocolState proto) (ProtocolMessage proto)
 
 data PoolSettings = PoolSettings {
     pIsClient :: Bool
@@ -64,37 +95,89 @@ deriving instance Generic PortNumber
 
 instance Binary PortNumber
 
+-- this is generic
 data ProcessConfig = ProcessConfig {
-    pcContext :: LogContext,
-    pcMetrics :: Metrics.Metrics,
     pcMinPort :: PortNumber,
     pcMaxPort :: PortNumber,
     pcWorkersCount :: Int
   }
 
-type AProcess a = ReaderT ProcessConfig Process a
+-- this is ProtocolM-specific
+data ProcessState st = ProcessState {
+    psContext :: LogContext,
+    psMetrics :: Metrics.Metrics,
+    psConfig :: ProcessConfig,
+    psState :: st
+  }
 
-instance HasLogContext (ReaderT ProcessConfig Process) where
-  getLogContext = asks pcContext
+type ProtocolM st a = StateT (ProcessState st) Process a
 
-  withLogContext frame = local (\cfg -> cfg {pcContext = frame : pcContext cfg})
+getP :: ProtocolM st st
+getP = gets psState
 
-instance Metrics.MonadMetrics (ReaderT ProcessConfig Process) where
-  getMetrics = asks pcMetrics
+putP :: st -> ProtocolM st ()
+putP x = modify $ \st -> st {psState = x}
 
-spawnAProcess :: Show idx => String -> idx -> AProcess () -> AProcess ProcessId
+instance HasLogContext (StateT (ProcessState st) Process) where
+  getLogContext = gets psContext
+
+  withLogContext frame actions = do
+    context <- gets psContext
+    let context' = frame : context
+    modify $ \cfg -> cfg {psContext = context'}
+    result <- actions
+    modify $ \cfg -> cfg {psContext = context}
+    return result
+
+instance Metrics.MonadMetrics (StateT (ProcessState st) Process) where
+  getMetrics = gets psMetrics
+
+instance ProcessMonad (StateT (ProcessState st) Process) where
+  liftP = lift
+
+  askConfig = gets psConfig
+
+asksConfig :: ProcessMonad m => (ProcessConfig -> a) -> m a
+asksConfig fn = do
+  cfg <- askConfig
+  return $ fn cfg
+
+spawnAProcess :: Show idx => String -> idx -> ProtocolM st () -> ProtocolM st ProcessId
 spawnAProcess name idx proc = do
-  cfg <- ask
-  lift $ spawnLocal $ do
-      self <- getSelfPid
-      let frame = LogContextFrame [
-                    ("pid", Variable (show self)),
-                    ("thread", Variable name),
-                    ("index", Variable (show idx))
-                  ] noChange
-      let cfg' = cfg {pcContext = frame : pcContext cfg}
-      runReaderT proc cfg'
+    cfg <- St.get
+    lift $ spawnLocal $ do
+             self <- getSelfPid
+             runAProcess cfg $ withContext self proc
+  where
+    withContext pid =
+          withLogVariable "pid" (show pid) .
+          withLogVariable "thread" name .
+          withLogVariable "index" (show idx)
 
-runAProcess :: ProcessConfig -> AProcess () -> Process ()
-runAProcess cfg proc = runReaderT proc cfg
+-- spawnAProcess :: forall m idx. (MonadBaseControl Process m, HasLogContext m, Show idx) => String -> idx -> m () -> m ProcessId
+-- spawnAProcess name idx proc = do
+-- 
+--     -- Outside `control' call, we're in the `m' monad
+--     liftBaseWith $ \runInProcess -> do -- runInProcess :: m a -> Process (StM m a)
+--       -- here we're in the Process monad
+--       self <- getSelfPid
+--       step1 runInProcess self
+-- 
+--   where
+--     step1 :: RunInBase m Process -> ProcessId -> Process ProcessId
+--     step1 runInProcess self = do
+--       spawnLocal $ do
+--                 -- stm :: StM m ()
+--                 stm <- runInProcess $ -- runInProcess (something :: m a) :: Process (StM m a)
+--                         -- here we're in the `m' monad again
+--                         withContext self proc
+--                 return (restoreM stm) --  Process (m ())
+-- 
+--     withContext pid =
+--           withLogVariable "pid" (show pid) .
+--           withLogVariable "thread" name .
+--           withLogVariable "index" (show idx)
+    
+runAProcess :: ProcessState st -> ProtocolM st () -> Process ()
+runAProcess cfg proc = evalStateT proc cfg
 
