@@ -12,6 +12,7 @@ import Control.Concurrent
 import Control.Distributed.Process hiding (bracket, finally)
 import Control.Distributed.Process.Node
 import Control.Monad.Catch (bracket, finally)
+import qualified Control.Monad.Metrics as Metrics
 import Data.Binary
 import Data.Maybe
 import qualified Data.Map as M
@@ -67,16 +68,18 @@ matcher port = do
     registerRq st (RegisterRq sender key) = do
       liftIO $ modifyIORef st $ \m -> M.insert key sender m
 
-registerRq :: PortNumber -> MatchKey -> Process ()
+registerRq :: ProcessMonad m => PortNumber -> MatchKey -> m ()
 registerRq port key = do
-  self <- getSelfPid
-  let name = "matcher:" ++ show port
-  nsend name (RegisterRq self key)
+  Metrics.increment "matcher.registration.size"
+  Metrics.timed "matcher.registration.duration" $ do
+    self <- liftP getSelfPid
+    let name = "matcher:" ++ show port
+    liftP $ nsend name (RegisterRq self key)
 
-whoSentRq :: PortNumber -> MatchKey -> Process (Maybe ProcessId)
-whoSentRq port key = do
-  self <- getSelfPid
+whoSentRq :: ProcessMonad m => PortNumber -> MatchKey -> m (Maybe ProcessId)
+whoSentRq port key = Metrics.timed "matcher.request.duration" $ do
+  self <- liftP getSelfPid
   let name = "matcher:" ++ show port
-  nsend name (WhoSentRq self key)
-  expect
+  liftP $ nsend name (WhoSentRq self key)
+  liftP expect
 

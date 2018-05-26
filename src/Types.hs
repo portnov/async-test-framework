@@ -47,7 +47,7 @@ class IsFrame f where
   recvMessage :: IsMessage m => Socket -> f -> IO m
   sendMessage :: IsMessage m => Socket -> f -> m -> IO ()
 
-class (Monad m, MonadIO m, HasLogContext m, Metrics.MonadMetrics m) => ProcessMonad m where
+class (Monad m, MonadIO m, HasLogContext m, Metrics.MonadMetrics m, MonadMask m) => ProcessMonad m where
   liftP :: Process a -> m a
   askConfig :: m ProcessConfig
   -- spawnP :: m () -> m ProcessId

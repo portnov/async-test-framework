@@ -69,7 +69,7 @@ sendWriter mbPort msg = do
               idx <- liftIO $ randomRIO (0, count-1)
               return $ minPort + fromIntegral (idx :: Int)
   when (not $ isResponse msg) $ do
-      liftP $ registerRq port (getMatchKey msg)
+      registerRq port (getMatchKey msg)
   let name = "writer:" ++ show port
   liftP $ nsend name msg
 
@@ -85,7 +85,7 @@ reader proto port = do
             if isResponse msg
               then do
                 Metrics.increment "reader.received.responses"
-                mbRequester <- liftP $ whoSentRq (getPortNumber port) (getMatchKey msg)
+                mbRequester <- whoSentRq (getPortNumber port) (getMatchKey msg)
                 case mbRequester of
                   Nothing -> 
                     $reportError "Received response #{} for request that we did not send, skipping" (Single $ getMatchKey msg)
