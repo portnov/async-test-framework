@@ -65,7 +65,7 @@ instance Protocol MyProtocol where
     return $ MyMessage False key "request"
 
   processRq msg = do
-    delay <- liftIO $ randomRIO (0, 10)
+    delay <- liftIO $ randomRIO (0, 2)
     liftIO $ threadDelay $ delay * 100 * 1000
     return $ msg {mIsResponse = True, mPayload = "response"}
 
@@ -175,7 +175,7 @@ generator proto myIndex = do
   liftP $ register myName self
 
   $debug "hello from client worker #{}" (Single myIndex)
-  forM_ [1 .. 200] $ \id -> do
+  forM_ [1 .. 2000] $ \id -> do
     request <- generateRq proto
     let key = getMatchKey request
     Metrics.timed "generator.requests.duration" $ do

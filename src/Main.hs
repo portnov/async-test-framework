@@ -11,7 +11,7 @@ import Monitoring
 run :: Int -> (Metrics.Metrics -> ProcessConfig -> IO ()) -> IO ()
 run port runner = do
   metrics <- setupMetrics port
-  let cfg = ProcessConfig 9090 9100 40
+  let cfg = ProcessConfig 9090 9100 400
   runner metrics cfg
 
 main :: IO ()
