@@ -18,6 +18,7 @@ import Control.Monad.Catch (bracket, finally)
 import qualified Control.Monad.Metrics as Metrics
 import Data.Binary
 import Data.Maybe
+import Data.IORef
 import qualified Data.ByteString.Lazy as L
 import Data.String
 import Network.Socket hiding (send)
@@ -117,8 +118,9 @@ runClient metrics cfg = do
   let minPort = pcMinPort cfg
       maxPort = pcMaxPort cfg
 
+  rps <- newIORef (0,0)
   let st0 = initialState (MySettings 100)
-      st = ProcessState [] metrics cfg (pcGeneratorEnabled cfg) 1000 (pcGeneratorTargetRps cfg) st0
+      st = ProcessState [] metrics cfg (pcGeneratorEnabled cfg) 1000 (pcGeneratorTargetRps cfg) rps st0
       proto = MyProtocol
 
   runProcess node $ do
@@ -128,6 +130,8 @@ runClient metrics cfg = do
         spawnAProcess "monitor" 0 $ do
             liftP $ register "monitor" =<< getSelfPid
             globalCollector
+
+        spawnAProcess "rps controller" 0 rpsController
 
         nWorkers <- asksConfig pcWorkersCount
         isGenerator <- asksConfig pcIsGenerator
@@ -172,8 +176,9 @@ runServer metrics cfg = do
   let minPort = pcMinPort cfg
       maxPort = pcMaxPort cfg
 
+  rps <- newIORef (0,0)
   let st0 = initialState (MySettings 200)
-      st = ProcessState [] metrics cfg (pcGeneratorEnabled cfg) 1000 (pcGeneratorTargetRps cfg) st0
+      st = ProcessState [] metrics cfg (pcGeneratorEnabled cfg) 1000 (pcGeneratorTargetRps cfg) rps st0
       proto = MyProtocol
 
   putStrLn "hello"
@@ -183,6 +188,8 @@ runServer metrics cfg = do
         spawnAProcess "monitor" 0 $ do
             liftP $ register "monitor" =<< getSelfPid
             globalCollector
+
+        spawnAProcess "rps controller" 0 rpsController
 
         nWorkers <- asksConfig pcWorkersCount
         isGenerator <- asksConfig pcIsGenerator

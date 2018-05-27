@@ -19,6 +19,7 @@ import qualified Control.Monad.Metrics as Metrics
 import Data.Typeable
 import Data.Binary
 import Data.Maybe
+import Data.IORef
 import qualified Data.HashMap.Strict as H
 import qualified Data.ByteString.Lazy as L
 import Data.String
@@ -185,22 +186,29 @@ setTargetRps rps =
 
 calcGeneratorDelay :: Int -> ProtocolM st Int
 calcGeneratorDelay targetRps = do
+  st <- gets psRpsStats
+  (prevSecondCount, lastSecondCount) <- liftIO $ readIORef st
+  let currentRps = fromIntegral (lastSecondCount - prevSecondCount)
+  currentDelay <- gets psGeneratorDelay
+  let deltaRps = targetRps - currentRps
+      newDelay = max 1 $ round $ fromIntegral currentDelay - 500 * fromIntegral deltaRps
+  modify $ \st -> st {psGeneratorDelay = newDelay}
+  $info "Current RPS {}, target RPS {}, old delay {}, new delay {}"
+      (currentRps, targetRps, currentDelay, newDelay)
+  return newDelay
+
+rpsController :: ProtocolM st ()
+rpsController = forever $ do
+  liftIO $ threadDelay $ 1000 * 1000
   metrics <- Metrics.getMetrics
   let store = metrics ^. Metrics.metricsStore
   sample <- liftIO $ EKG.sampleAll store
-  case H.lookup "generator.requests.duration" sample of
-    Nothing -> gets psGeneratorDelay
-    Just (EKG.Distribution stats) -> do
-      let currentDuration = EKG.mean stats
-      currentDelay <- gets psGeneratorDelay
-      nWorkers <- asksConfig pcWorkersCount
-      let currentRps = round $ fromIntegral nWorkers / currentDuration
-          deltaRps = targetRps - currentRps
-          newDelay = max 100 $ round $ fromIntegral currentDelay - 1000 * fromIntegral deltaRps
-      modify $ \st -> st {psGeneratorDelay = newDelay}
-      $info "Duration {}, current RPS {}, target RPS {}, old delay {}, new delay {}"
-          (currentDuration, currentRps, targetRps, currentDelay, newDelay)
-      return newDelay
+  case H.lookup "writer.sent.messages" sample of
+    Nothing -> return ()
+    Just (EKG.Counter currentCount) -> do
+      -- $info "new count: {}" (Single currentCount)
+      st <- gets psRpsStats
+      liftIO $ modifyIORef st $ \(prev,last) -> (last, currentCount)
 
 generator :: forall proto. Protocol proto => proto -> Int -> ProtocolM (ProtocolState proto) ()
 generator proto myIndex = do
@@ -214,9 +222,9 @@ generator proto myIndex = do
     -- liftIO $ putStrLn $ show enabled
     if enabled
       then do
+        delay <- calcGeneratorDelay targetRps
+        liftIO $ threadDelay $ delay
         Metrics.timed "generator.requests.duration" $ do
-            delay <- calcGeneratorDelay targetRps
-            liftIO $ threadDelay $ delay
             request <- generateRq proto myIndex 
             let key = getMatchKey request
             sendWriter Nothing request

@@ -23,6 +23,8 @@ import qualified Data.Text as T
 import qualified Data.Text.Lazy as TL
 import Data.Typeable
 import Data.Binary
+import Data.Int
+import Data.IORef
 import qualified Data.ByteString.Lazy as L
 import Network.Socket
 import System.Log.Heavy
@@ -124,6 +126,7 @@ data ProcessState st = ProcessState {
     psGeneratorEnabled :: Bool,
     psGeneratorDelay :: Int,
     psTargetRps :: Int,
+    psRpsStats :: IORef (Int64, Int64),
     psState :: st
   }
 
