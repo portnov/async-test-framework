@@ -1,5 +1,5 @@
 is-generator: false
-workers: 100
+workers: 400
 processor-delay-min: 100
 processor-delay-max: 500
 monitor-port: 8080

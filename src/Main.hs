@@ -12,6 +12,7 @@ import Config
 run :: FilePath -> (Metrics.Metrics -> ProcessConfig -> IO ()) -> IO ()
 run path runner = do
   config <- readConfig path
+  print config
   metrics <- setupMetrics (fromIntegral $ pcEkgPort config)
   runner metrics config
 

@@ -19,6 +19,7 @@ import qualified Control.Monad.Metrics as Metrics
 import Data.Typeable
 import Data.Binary
 import Data.Maybe
+import qualified Data.HashMap.Strict as H
 import qualified Data.ByteString.Lazy as L
 import Data.String
 import Network.Socket hiding (send)
@@ -27,8 +28,11 @@ import GHC.Generics
 import System.Random
 import Text.Printf
 import System.Log.Heavy
+import qualified System.Metrics.Distribution.Internal as EKG
+import qualified System.Metrics as EKG
 -- import System.Log.Heavy.Shortcuts
 import Data.Text.Format.Heavy
+import Lens.Micro
 
 import Types
 import Connection
@@ -146,17 +150,26 @@ receiveResponse key = do
     isSuitable (_, msg) =
       isResponse msg && getMatchKey msg == key
 
-checkGeneratorEnabled :: ProtocolM st Bool
-checkGeneratorEnabled = do
+getGeneratorSettings :: ProtocolM st (Bool, Int)
+getGeneratorSettings = do
   mbCommand <- liftP $ expectTimeout 0
   case mbCommand of
-    Nothing -> gets psGeneratorEnabled
+    Nothing -> do
+      enabled <- gets psGeneratorEnabled
+      rps <- gets psTargetRps
+      return (enabled, rps)
     Just StartGenerator -> do
       modify $ \st -> st {psGeneratorEnabled = True}
-      return True
+      rps <- gets psTargetRps
+      return (True, rps)
     Just StopGenerator -> do
       modify $ \st -> st {psGeneratorEnabled = False}
-      return False
+      rps <- gets psTargetRps
+      return (False, rps)
+    Just (SetTargetRps rps) -> do
+      modify $ \st -> st {psTargetRps = rps}
+      enabled <- gets psGeneratorEnabled
+      return (enabled, rps)
 
 startGenerator :: ProtocolM st ()
 startGenerator =
@@ -166,6 +179,29 @@ stopGenerator :: ProtocolM st ()
 stopGenerator =
   sendAllWorkers StopGenerator
 
+setTargetRps :: Int -> ProtocolM st ()
+setTargetRps rps =
+  sendAllWorkers (SetTargetRps rps)
+
+calcGeneratorDelay :: Int -> ProtocolM st Int
+calcGeneratorDelay targetRps = do
+  metrics <- Metrics.getMetrics
+  let store = metrics ^. Metrics.metricsStore
+  sample <- liftIO $ EKG.sampleAll store
+  case H.lookup "generator.requests.duration" sample of
+    Nothing -> gets psGeneratorDelay
+    Just (EKG.Distribution stats) -> do
+      let currentDuration = EKG.mean stats
+      currentDelay <- gets psGeneratorDelay
+      nWorkers <- asksConfig pcWorkersCount
+      let currentRps = round $ fromIntegral nWorkers / currentDuration
+          deltaRps = targetRps - currentRps
+          newDelay = max 100 $ round $ fromIntegral currentDelay - 1000 * fromIntegral deltaRps
+      modify $ \st -> st {psGeneratorDelay = newDelay}
+      $info "Duration {}, current RPS {}, target RPS {}, old delay {}, new delay {}"
+          (currentDuration, currentRps, targetRps, currentDelay, newDelay)
+      return newDelay
+
 generator :: forall proto. Protocol proto => proto -> Int -> ProtocolM (ProtocolState proto) ()
 generator proto myIndex = do
   self <- liftP getSelfPid
@@ -174,22 +210,24 @@ generator proto myIndex = do
 
   $debug "hello from client worker #{}" (Single myIndex)
   forever $ do
-    enabled <- checkGeneratorEnabled
+    (enabled, targetRps) <- getGeneratorSettings
     -- liftIO $ putStrLn $ show enabled
     if enabled
       then do
-        request <- generateRq proto myIndex 
-        let key = getMatchKey request
         Metrics.timed "generator.requests.duration" $ do
+            delay <- calcGeneratorDelay targetRps
+            liftIO $ threadDelay $ delay
+            request <- generateRq proto myIndex 
+            let key = getMatchKey request
             sendWriter Nothing request
             $info "sent request #{}" (Single key)
-            mbResponse <- receiveResponse (getMatchKey request) :: ProtocolM (ProtocolState proto) (Maybe (ProtocolMessage proto))
+            mbResponse <- receiveResponse key :: ProtocolM (ProtocolState proto) (Maybe (ProtocolMessage proto))
             case mbResponse of
               Nothing -> do
                 $reportError "Timeout while waiting for response for request #{}" (Single key)
                 Metrics.increment "generator.requests.timeouts"
               Just response -> do
-                when (getMatchKey response /= getMatchKey request) $
+                when (getMatchKey response /= key) $
                     fail "Suddenly received incorrect reply"
                 $info "response received: #{}" (Single $ getMatchKey response)
       else

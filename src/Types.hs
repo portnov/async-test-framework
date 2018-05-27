@@ -103,6 +103,7 @@ instance Binary PortNumber
 data ProcessConfig = ProcessConfig {
     pcIsGenerator :: Bool,
     pcGeneratorEnabled :: Bool,
+    pcGeneratorTargetRps :: Int,
     pcMinPort :: PortNumber,
     pcMaxPort :: PortNumber,
     pcWorkersCount :: Int,
@@ -113,6 +114,7 @@ data ProcessConfig = ProcessConfig {
     pcMatcherTimeout :: Int,
     pcGeneratorTimeout :: Int
   }
+  deriving (Show)
 
 -- this is ProtocolM-specific
 data ProcessState st = ProcessState {
@@ -120,12 +122,15 @@ data ProcessState st = ProcessState {
     psMetrics :: Metrics.Metrics,
     psConfig :: ProcessConfig,
     psGeneratorEnabled :: Bool,
+    psGeneratorDelay :: Int,
+    psTargetRps :: Int,
     psState :: st
   }
 
 data GeneratorCommand =
     StartGenerator
   | StopGenerator
+  | SetTargetRps Int
   deriving (Typeable, Generic)
 
 instance Binary GeneratorCommand

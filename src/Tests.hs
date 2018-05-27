@@ -90,16 +90,21 @@ repl = do
   liftIO $ hSetBuffering stdout NoBuffering
   liftIO $ putStr "> "
   command <- liftIO getLine
-  case command of
-    "start" -> do
+  case words command of
+    ["start"] -> do
       startGenerator
       repl
-    "stop" -> do
+    ["stop"] -> do
       stopGenerator
       repl
-    "" -> repl
-    "exit" -> return ()
-    "quit" -> return ()
+    ["rps", ns] -> do
+      let rps = read ns
+      setTargetRps rps
+      repl
+    [] -> repl
+    [""] -> repl
+    ["exit"] -> return ()
+    ["quit"] -> return ()
     _ -> do
       liftIO $ putStrLn "unknown command"
       repl
@@ -113,7 +118,7 @@ runClient metrics cfg = do
       maxPort = pcMaxPort cfg
 
   let st0 = initialState (MySettings 100)
-      st = ProcessState [] metrics cfg (pcGeneratorEnabled cfg) st0
+      st = ProcessState [] metrics cfg (pcGeneratorEnabled cfg) 1000 (pcGeneratorTargetRps cfg) st0
       proto = MyProtocol
 
   runProcess node $ do
@@ -168,7 +173,7 @@ runServer metrics cfg = do
       maxPort = pcMaxPort cfg
 
   let st0 = initialState (MySettings 200)
-      st = ProcessState [] metrics cfg (pcGeneratorEnabled cfg) st0
+      st = ProcessState [] metrics cfg (pcGeneratorEnabled cfg) 1000 (pcGeneratorTargetRps cfg) st0
       proto = MyProtocol
 
   putStrLn "hello"
