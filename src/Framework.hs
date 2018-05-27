@@ -58,6 +58,17 @@ sendAllWorkers msg = do
     let name = "worker:" ++ show idx
     liftP $ nsend name msg
 
+getAllWriterNames :: ProcessMonad m => m [String]
+getAllWriterNames = do
+    minPort <- asksConfig pcMinPort
+    maxPort <- asksConfig pcMaxPort
+    return ["writer:" ++ show port | port <- [minPort .. maxPort]]
+
+getAllWorkerNames :: ProcessMonad m => m [String]
+getAllWorkerNames = do
+  count <- asksConfig pcWorkersCount
+  return ["worker:" ++ show i | i <- [0 .. count-1]]
+
 sendWriter :: (ProcessMonad m, IsMessage msg) => Maybe PortNumber -> msg -> m ()
 sendWriter mbPort msg = do
   port <- case mbPort of

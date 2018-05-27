@@ -45,6 +45,7 @@ dependencies:
 - ekg >= 0.4
 - ekg-core >= 0.1
 - monad-metrics >= 0.2.1.1
+- microlens
 
 executables:
   async-exe:

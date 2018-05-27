@@ -36,6 +36,7 @@ import Pool
 import Logging
 import Matcher
 import Framework
+import Monitoring
 
 data MyProtocol = MyProtocol
 
@@ -119,6 +120,7 @@ runClient metrics cfg = do
 
   runProcess node $ do
     spawnLocal $ logWriter "client.log"
+
     runAProcess st $ withLogVariable "process" ("client" :: String) $ do
         nWorkers <- asksConfig pcWorkersCount
 --         forM_ [0 .. nWorkers-1] $ \idx ->
@@ -144,6 +146,8 @@ runClient metrics cfg = do
         $debug "hello" ()
         forM_ [0 .. nWorkers-1] $ \idx ->
             spawnAProcess "generator" idx $ generator proto idx
+
+        spawnAProcess "monitor" 0 globalCollector
         return ()
 
     runAProcess st $ withLogVariable "process" ("repl" :: String) repl
@@ -189,6 +193,8 @@ runServer metrics cfg = do
 --         forM_ [0 .. nWorkers-1] $ \idx -> do
 --             spawnAProcess "generator" idx $ generator proto idx
 --             liftIO $ putStrLn $ "spawned generator #" ++ show idx
+
+        spawnAProcess "monitor" 0 globalCollector
         return ()
 
     runAProcess st $ withLogVariable "process" ("repl" :: String) repl
