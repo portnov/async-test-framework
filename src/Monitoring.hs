@@ -46,7 +46,8 @@ globalCollector = do
     workerMailboxSize <- liftIO $ EKG.createGauge "worker.mailbox.size" store
     matcherSizeDistrib <- liftIO $ EKG.createDistribution "matcher.registration.size" store
     forever $ do
-      liftIO $ threadDelay $ 1000 * 1000
+      delay <- asksConfig pcMonitorDelay
+      liftIO $ threadDelay $ delay * 1000
       liftP $ receiveWait [
                 match (matcherSize matcherSizeDistrib)
               ]
@@ -61,6 +62,4 @@ globalCollector = do
     matcherSize :: Distribution.Distribution -> MatcherStats -> Process ()
     matcherSize distrib (MatcherStats size) = do
       liftIO $ Distribution.add distrib (fromIntegral size)
-    
-
 

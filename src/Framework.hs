@@ -198,6 +198,10 @@ processor proto myIndex = do
     (srcPort, request) <- liftP expect :: ProtocolM (ProtocolState proto) (PortNumber, ProtocolMessage proto)
     $info "request received: #{}" (Single $ getMatchKey request)
     Metrics.timed "processor.requests.duration" $ do
+      minDelay <- asksConfig pcProcessorMinDelay
+      maxDelay <- asksConfig pcProcessorMaxDelay
+      delay <- liftIO $ randomRIO (minDelay, maxDelay)
+      liftIO $ threadDelay $ delay * 1000
       response <- processRq request
       sendWriter (Just srcPort) response
       $info "response sent: #{}" (Single $ getMatchKey response)

@@ -100,11 +100,16 @@ deriving instance Generic PortNumber
 
 instance Binary PortNumber
 
--- this is generic
 data ProcessConfig = ProcessConfig {
+    pcIsGenerator :: Bool,
+    pcGeneratorEnabled :: Bool,
     pcMinPort :: PortNumber,
     pcMaxPort :: PortNumber,
-    pcWorkersCount :: Int
+    pcWorkersCount :: Int,
+    pcMonitorDelay :: Int,
+    pcProcessorMinDelay :: Int,
+    pcProcessorMaxDelay :: Int,
+    pcEkgPort :: PortNumber
   }
 
 -- this is ProtocolM-specific

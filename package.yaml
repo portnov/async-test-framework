@@ -47,6 +47,8 @@ dependencies:
 - monad-metrics >= 0.2.1.1
 - microlens
 - time
+- yaml
+- aeson
 
 executables:
   async-exe:

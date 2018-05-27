@@ -7,17 +7,18 @@ import Types
 import Connection
 import Tests
 import Monitoring
+import Config
 
-run :: Int -> (Metrics.Metrics -> ProcessConfig -> IO ()) -> IO ()
-run port runner = do
-  metrics <- setupMetrics port
-  let cfg = ProcessConfig 9090 9100 400
-  runner metrics cfg
+run :: FilePath -> (Metrics.Metrics -> ProcessConfig -> IO ()) -> IO ()
+run path runner = do
+  config <- readConfig path
+  metrics <- setupMetrics (fromIntegral $ pcEkgPort config)
+  runner metrics config
 
 main :: IO ()
 main = do
   [arg] <- getArgs
   case arg of
-    "client" -> run 8000 runClient
-    "server" -> run 8080 runServer
+    "client" -> run "client.yaml" runClient
+    "server" -> run "server.yaml" runServer
 

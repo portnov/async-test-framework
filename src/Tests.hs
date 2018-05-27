@@ -70,8 +70,6 @@ instance Protocol MyProtocol where
     return $ MyMessage False key' "request"
 
   processRq msg = do
-    delay <- liftIO $ randomRIO (0, 2)
-    liftIO $ threadDelay $ delay * 100 * 1000
     return $ msg {mIsResponse = True, mPayload = "response"}
 
 type MyMessage = ProtocolMessage MyProtocol
@@ -115,7 +113,7 @@ runClient metrics cfg = do
       maxPort = pcMaxPort cfg
 
   let st0 = initialState (MySettings 100)
-      st = ProcessState [] metrics cfg False st0
+      st = ProcessState [] metrics cfg (pcGeneratorEnabled cfg) st0
       proto = MyProtocol
 
   runProcess node $ do
@@ -127,8 +125,10 @@ runClient metrics cfg = do
             globalCollector
 
         nWorkers <- asksConfig pcWorkersCount
---         forM_ [0 .. nWorkers-1] $ \idx ->
---             spawnAProcess "processor" idx $ processor proto idx
+        isGenerator <- asksConfig pcIsGenerator
+        when (not isGenerator) $ do
+          forM_ [0 .. nWorkers-1] $ \idx ->
+              spawnAProcess "processor" idx $ processor proto idx
 
         liftIO $ threadDelay $ 100*1000
           
@@ -148,8 +148,9 @@ runClient metrics cfg = do
         liftIO $ threadDelay $ 100*1000
 
         $debug "hello" ()
-        forM_ [0 .. nWorkers-1] $ \idx ->
-            spawnAProcess "generator" idx $ generator proto idx
+        when isGenerator $ do
+          forM_ [0 .. nWorkers-1] $ \idx ->
+              spawnAProcess "generator" idx $ generator proto idx
 
         return ()
 
@@ -166,7 +167,7 @@ runServer metrics cfg = do
       maxPort = pcMaxPort cfg
 
   let st0 = initialState (MySettings 200)
-      st = ProcessState [] metrics cfg False st0
+      st = ProcessState [] metrics cfg (pcGeneratorEnabled cfg) st0
       proto = MyProtocol
 
   putStrLn "hello"
@@ -178,9 +179,10 @@ runServer metrics cfg = do
             globalCollector
 
         nWorkers <- asksConfig pcWorkersCount
-        forM_ [0 .. nWorkers-1] $ \idx -> do
-            spawnAProcess "processor" idx $ processor proto idx
-            -- liftIO $ putStrLn $ "spawned processor #" ++ show idx
+        isGenerator <- asksConfig pcIsGenerator
+        when (not isGenerator) $ do
+            forM_ [0 .. nWorkers-1] $ \idx -> do
+                spawnAProcess "processor" idx $ processor proto idx
 
         liftIO $ threadDelay $ 100*1000
           
@@ -197,9 +199,9 @@ runServer metrics cfg = do
               $debug "server spawned writer: {}" (Single $ show extPort)
               return ()
 
---         forM_ [0 .. nWorkers-1] $ \idx -> do
---             spawnAProcess "generator" idx $ generator proto idx
---             liftIO $ putStrLn $ "spawned generator #" ++ show idx
+        when isGenerator $ do
+            forM_ [0 .. nWorkers-1] $ \idx -> do
+                spawnAProcess "generator" idx $ generator proto idx
 
         return ()
 
