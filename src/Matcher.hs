@@ -71,9 +71,11 @@ matcher port = do
   where
     whoSentRq :: MatcherState -> WhoSentRq -> Process ()
     whoSentRq st (WhoSentRq caller key) = do
-      m <- liftIO $ readIORef st
-      let res = M.lookup key m
-      send caller $ miSenderPid `fmap` res
+      res <- liftIO $ atomicModifyIORef' st $ \m ->
+               let pid = miSenderPid `fmap` M.lookup key m
+                   m' = M.delete key m
+               in (m', pid)
+      send caller res
 
     registerRq :: MatcherState -> RegisterRq -> Process ()
     registerRq st (RegisterRq sender key) = do
