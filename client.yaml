@@ -3,3 +3,6 @@ workers: 100
 processor-delay-min: 0
 processor-delay-max: 200
 monitor-port: 8000
+matcher-timeout: 2000
+generator-timeout: 2100
+

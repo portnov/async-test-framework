@@ -52,8 +52,8 @@ data MessageInfo = MessageInfo {
 
 type MatcherState = IORef (M.Map MatchKey MessageInfo)
 
-matcher :: PortNumber -> Process ()
-matcher port = do
+matcher :: PortNumber -> Int -> Process ()
+matcher port timeout = do
   self <- getSelfPid
   let myName = "matcher:" ++ show port
   register myName self
@@ -71,16 +71,22 @@ matcher port = do
   where
     whoSentRq :: MatcherState -> WhoSentRq -> Process ()
     whoSentRq st (WhoSentRq caller key) = do
+      now <- liftIO $ getCurrentTime
       res <- liftIO $ atomicModifyIORef' st $ \m ->
-               let pid = miSenderPid `fmap` M.lookup key m
+               let maybeMi = M.lookup key m
                    m' = M.delete key m
-               in (m', pid)
+               in  case maybeMi of
+                     Nothing -> (m', Nothing)
+                     Just mi ->
+                       if miExpirationTime mi > now
+                         then (m', Just (miSenderPid mi))
+                         else (m', Nothing)
       send caller res
 
     registerRq :: MatcherState -> RegisterRq -> Process ()
     registerRq st (RegisterRq sender key) = do
       now <- liftIO $ getCurrentTime
-      let expiration = addUTCTime 10 now
+      let expiration = addUTCTime (fromIntegral timeout / 1000) now
       liftIO $
         atomicModifyIORef' st $ \m ->
           let m' = M.insert key (MessageInfo sender expiration) m

@@ -109,7 +109,9 @@ data ProcessConfig = ProcessConfig {
     pcMonitorDelay :: Int,
     pcProcessorMinDelay :: Int,
     pcProcessorMaxDelay :: Int,
-    pcEkgPort :: PortNumber
+    pcEkgPort :: PortNumber,
+    pcMatcherTimeout :: Int,
+    pcGeneratorTimeout :: Int
   }
 
 -- this is ProtocolM-specific

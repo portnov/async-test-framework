@@ -20,6 +20,8 @@ instance FromJSON ProcessConfig where
     <*> v .:? "processor-delay-min" .!= 0
     <*> v .:? "processor-delay-max" .!= 100
     <*> v .:? "monitor-port" .!= 8000
+    <*> v .:? "matcher-timeout" .!= 1500
+    <*> v .:? "generator-timeout" .!= 2
 
 instance FromJSON PortNumber where
   parseJSON o = fromIntegral `fmap` (parseJSON o :: Parser Word16)

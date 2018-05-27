@@ -126,6 +126,7 @@ runClient metrics cfg = do
 
         nWorkers <- asksConfig pcWorkersCount
         isGenerator <- asksConfig pcIsGenerator
+        matcherTimeout <- asksConfig pcMatcherTimeout
         when (not isGenerator) $ do
           forM_ [0 .. nWorkers-1] $ \idx ->
               spawnAProcess "processor" idx $ processor proto idx
@@ -135,7 +136,7 @@ runClient metrics cfg = do
         forM_ [minPort .. maxPort] $ \portNumber -> do
             spawnAProcess "port" portNumber $ clientConnection localhost portNumber $ \extPort -> do
               let portNumber = getPortNumber extPort
-              m <- lift $ spawnLocal (matcher portNumber)
+              m <- lift $ spawnLocal (matcher portNumber matcherTimeout)
               lift $ link m
               w <- spawnAProcess "writer" portNumber (writer proto extPort)
               lift $ link w
@@ -180,6 +181,7 @@ runServer metrics cfg = do
 
         nWorkers <- asksConfig pcWorkersCount
         isGenerator <- asksConfig pcIsGenerator
+        matcherTimeout <- asksConfig pcMatcherTimeout
         when (not isGenerator) $ do
             forM_ [0 .. nWorkers-1] $ \idx -> do
                 spawnAProcess "processor" idx $ processor proto idx
@@ -189,7 +191,7 @@ runServer metrics cfg = do
         forM_ [minPort .. maxPort] $ \portNumber -> do
             spawnAProcess "port" portNumber $ serverConnection localhost portNumber $ \extPort -> do
               let portNumber = getPortNumber extPort
-              m <- lift $ spawnLocal (matcher portNumber)
+              m <- lift $ spawnLocal (matcher portNumber matcherTimeout)
               lift $ link m
               r <- spawnAProcess "reader" portNumber (reader proto extPort)
               lift $ link r

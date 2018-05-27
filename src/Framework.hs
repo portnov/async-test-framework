@@ -98,8 +98,9 @@ reader proto port = do
                 Metrics.increment "reader.received.responses"
                 mbRequester <- whoSentRq (getPortNumber port) (getMatchKey msg)
                 case mbRequester of
-                  Nothing -> 
-                    $reportError "Received response #{} for request that we did not send, skipping" (Single $ getMatchKey msg)
+                  Nothing -> do
+                    $reportError "Late response receive for request #{}" (Single $ getMatchKey msg)
+                    Metrics.increment "generator.requests.late"
                   Just requester -> sendWorker port (Just requester) msg
               else do
                   Metrics.increment "reader.received.requests"
@@ -134,13 +135,14 @@ writer proto port = do
         ServerPort _ conn _ -> liftIO $ close conn
         _ -> return ()
 
-receiveResponse :: forall proto. Protocol proto => MatchKey -> ProtocolM (ProtocolState proto) (ProtocolMessage proto)
-receiveResponse key =
-    liftP $ receiveWait [
-      matchIf isSuitable (return . snd)
-    ]
+receiveResponse :: forall m msg. (ProcessMonad m, IsMessage msg) => MatchKey -> m (Maybe msg)
+receiveResponse key = do
+    timeout <- asksConfig pcGeneratorTimeout
+    liftP $ receiveTimeout (timeout * 1000) [
+              matchIf isSuitable (return . snd)
+            ]
   where
-    isSuitable :: (PortNumber, ProtocolMessage proto) -> Bool
+    isSuitable :: (PortNumber, msg) -> Bool
     isSuitable (_, msg) =
       isResponse msg && getMatchKey msg == key
 
@@ -181,10 +183,15 @@ generator proto myIndex = do
         Metrics.timed "generator.requests.duration" $ do
             sendWriter Nothing request
             $info "sent request #{}" (Single key)
-            response <- receiveResponse (getMatchKey request) :: ProtocolM (ProtocolState proto) (ProtocolMessage proto)
-            when (getMatchKey response /= getMatchKey request) $
-                fail "Suddenly received incorrect reply"
-            $info "response received: #{}" (Single $ getMatchKey response)
+            mbResponse <- receiveResponse (getMatchKey request) :: ProtocolM (ProtocolState proto) (Maybe (ProtocolMessage proto))
+            case mbResponse of
+              Nothing -> do
+                $reportError "Timeout while waiting for response for request #{}" (Single key)
+                Metrics.increment "generator.requests.timeouts"
+              Just response -> do
+                when (getMatchKey response /= getMatchKey request) $
+                    fail "Suddenly received incorrect reply"
+                $info "response received: #{}" (Single $ getMatchKey response)
       else
         liftIO $ threadDelay 1000
 
