@@ -10,7 +10,7 @@ import Control.Distributed.Process hiding (bracket, finally)
 import qualified System.Remote.Monitoring as EKG
 import qualified System.Metrics as EKG
 import qualified System.Metrics.Gauge as Gauge
--- import qualified System.Metrics.Distribution as EKG
+import qualified System.Metrics.Distribution as Distribution
 import Lens.Micro
 import Data.Int
 
@@ -40,18 +40,27 @@ collectQueueSize names = do
 
 globalCollector :: (ProcessMonad m) => m ()
 globalCollector = do
-  metrics <- Metrics.getMetrics
-  let store = metrics ^. Metrics.metricsStore
-  writerMailboxSize <- liftIO $ EKG.createGauge "writer.mailbox.size" store
-  workerMailboxSize <- liftIO $ EKG.createGauge "worker.mailbox.size" store
-  forever $ do
-    liftIO $ threadDelay $ 1000 * 1000
-    writerNames <- getAllWriterNames
-    writersSize <- collectQueueSize writerNames
-    liftIO $ Gauge.set writerMailboxSize writersSize
-    workerNames <- getAllWorkerNames
-    workersSize <- collectQueueSize workerNames
-    liftIO $ Gauge.set workerMailboxSize workersSize
+    metrics <- Metrics.getMetrics
+    let store = metrics ^. Metrics.metricsStore
+    writerMailboxSize <- liftIO $ EKG.createGauge "writer.mailbox.size" store
+    workerMailboxSize <- liftIO $ EKG.createGauge "worker.mailbox.size" store
+    matcherSizeDistrib <- liftIO $ EKG.createDistribution "matcher.registration.size" store
+    forever $ do
+      liftIO $ threadDelay $ 1000 * 1000
+      liftP $ receiveWait [
+                match (matcherSize matcherSizeDistrib)
+              ]
+      writerNames <- getAllWriterNames
+      writersSize <- collectQueueSize writerNames
+      liftIO $ Gauge.set writerMailboxSize writersSize
+      workerNames <- getAllWorkerNames
+      workersSize <- collectQueueSize workerNames
+      liftIO $ Gauge.set workerMailboxSize workersSize
+
+  where
+    matcherSize :: Distribution.Distribution -> MatcherStats -> Process ()
+    matcherSize distrib (MatcherStats size) = do
+      liftIO $ Distribution.add distrib (fromIntegral size)
     
 
 

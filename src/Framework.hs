@@ -195,13 +195,10 @@ processor proto myIndex = do
   liftP $ register myName self
   $debug "hello from server worker #{}" (Single myIndex)
   forever $ do
+    (srcPort, request) <- liftP expect :: ProtocolM (ProtocolState proto) (PortNumber, ProtocolMessage proto)
+    $info "request received: #{}" (Single $ getMatchKey request)
     Metrics.timed "processor.requests.duration" $ do
-      (srcPort, request) <- liftP expect :: ProtocolM (ProtocolState proto) (PortNumber, ProtocolMessage proto)
-      $info "request received: #{}" (Single $ getMatchKey request)
       response <- processRq request
-      -- delay <- liftIO $ randomRIO (0, 10)
-      -- liftIO $ threadDelay $ delay * 100 * 1000
       sendWriter (Just srcPort) response
       $info "response sent: #{}" (Single $ getMatchKey response)
-
 

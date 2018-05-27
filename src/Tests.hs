@@ -122,6 +122,10 @@ runClient metrics cfg = do
     spawnLocal $ logWriter "client.log"
 
     runAProcess st $ withLogVariable "process" ("client" :: String) $ do
+        spawnAProcess "monitor" 0 $ do
+            liftP $ register "monitor" =<< getSelfPid
+            globalCollector
+
         nWorkers <- asksConfig pcWorkersCount
 --         forM_ [0 .. nWorkers-1] $ \idx ->
 --             spawnAProcess "processor" idx $ processor proto idx
@@ -147,7 +151,6 @@ runClient metrics cfg = do
         forM_ [0 .. nWorkers-1] $ \idx ->
             spawnAProcess "generator" idx $ generator proto idx
 
-        spawnAProcess "monitor" 0 globalCollector
         return ()
 
     runAProcess st $ withLogVariable "process" ("repl" :: String) repl
@@ -170,6 +173,10 @@ runServer metrics cfg = do
   runProcess node $ do
     spawnLocal $ logWriter "server.log"
     runAProcess st $ withLogVariable "process" ("server" :: String) $ do
+        spawnAProcess "monitor" 0 $ do
+            liftP $ register "monitor" =<< getSelfPid
+            globalCollector
+
         nWorkers <- asksConfig pcWorkersCount
         forM_ [0 .. nWorkers-1] $ \idx -> do
             spawnAProcess "processor" idx $ processor proto idx
@@ -194,7 +201,6 @@ runServer metrics cfg = do
 --             spawnAProcess "generator" idx $ generator proto idx
 --             liftIO $ putStrLn $ "spawned generator #" ++ show idx
 
-        spawnAProcess "monitor" 0 globalCollector
         return ()
 
     runAProcess st $ withLogVariable "process" ("repl" :: String) repl

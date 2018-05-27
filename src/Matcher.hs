@@ -27,6 +27,7 @@ import System.Log.Heavy
 import Data.Text.Format.Heavy
 import Data.Typeable
 import Data.IORef
+import Data.Time.Clock
 
 import Types
 import Connection
@@ -43,7 +44,13 @@ data RegisterRq = RegisterRq ProcessId MatchKey
 
 instance Binary RegisterRq
 
-type MatcherState = IORef (M.Map MatchKey ProcessId)
+data MessageInfo = MessageInfo {
+    miSenderPid :: ProcessId,
+    miExpirationTime :: UTCTime
+  }
+  deriving (Show)
+
+type MatcherState = IORef (M.Map MatchKey MessageInfo)
 
 matcher :: PortNumber -> Process ()
 matcher port = do
@@ -51,6 +58,10 @@ matcher port = do
   let myName = "matcher:" ++ show port
   register myName self
   st <- liftIO $ newIORef M.empty
+
+  spawnLocal $ forever $ do
+    liftIO $ threadDelay $ 1000 * 1000
+    cleanup st
 
   forever $ do
     receiveWait [
@@ -62,15 +73,32 @@ matcher port = do
     whoSentRq st (WhoSentRq caller key) = do
       m <- liftIO $ readIORef st
       let res = M.lookup key m
-      send caller res
+      send caller $ miSenderPid `fmap` res
 
     registerRq :: MatcherState -> RegisterRq -> Process ()
     registerRq st (RegisterRq sender key) = do
-      liftIO $ modifyIORef st $ \m -> M.insert key sender m
+      now <- liftIO $ getCurrentTime
+      let expiration = addUTCTime 10 now
+      liftIO $
+        atomicModifyIORef' st $ \m ->
+          let m' = M.insert key (MessageInfo sender expiration) m
+          in (m', ())
+
+    cleanup :: MatcherState -> Process ()
+    cleanup st = do
+      oldSize <- liftIO $ M.size `fmap` readIORef st
+      liftIO $ do
+        now <- getCurrentTime
+        atomicModifyIORef' st $ \m ->
+          let m' = M.filter (\mi -> miExpirationTime mi > now) m
+          in (m', ())
+      newSize <- liftIO $ M.size `fmap` readIORef st
+      -- liftIO $ putStrLn $ show (oldSize - newSize)
+      nsend "monitor" (MatcherStats newSize) 
 
 registerRq :: ProcessMonad m => PortNumber -> MatchKey -> m ()
 registerRq port key = do
-  Metrics.increment "matcher.registration.size"
+  Metrics.increment "matcher.registration.count"
   Metrics.timed "matcher.registration.duration" $ do
     self <- liftP getSelfPid
     let name = "matcher:" ++ show port

@@ -38,6 +38,11 @@ data ExtPort =
 
 type MatchKey = L.ByteString
 
+data MatcherStats = MatcherStats Int
+  deriving (Typeable, Generic)
+
+instance Binary MatcherStats
+
 class (Binary m, Typeable m) => IsMessage m where
   isResponse :: m -> Bool
   isAdministrative :: m -> Bool
