@@ -187,7 +187,6 @@ rpsController = forever $ do
   case H.lookup "writer.sent.messages" sample of
     Nothing -> return ()
     Just (EKG.Counter currentCount) -> do
-      -- $info "new count: {}" (Single currentCount)
       st <- gets psRpsStats
       liftIO $ modifyIORef st $ \(prev,last) -> (last, currentCount)
 
