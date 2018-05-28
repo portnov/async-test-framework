@@ -3,7 +3,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
 
-module Matcher where
+module Network.Concurrent.Ampf.Matcher where
 
 import Control.Monad
 import Control.Monad.Reader hiding (reader)
@@ -29,10 +29,9 @@ import Data.Typeable
 import Data.IORef
 import Data.Time.Clock
 
-import Types
-import Connection
-import Pool
-import Logging
+import Network.Concurrent.Ampf.Types
+import Network.Concurrent.Ampf.Connection
+import Network.Concurrent.Ampf.Logging
 
 data WhoSentRq = WhoSentRq ProcessId MatchKey
   deriving (Typeable, Generic)

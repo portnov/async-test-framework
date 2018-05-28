@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleInstances #-}
 
-module Monitoring where
+module Network.Concurrent.Ampf.Monitoring where
 
 import qualified Control.Monad.Metrics as Metrics
 import Control.Monad
@@ -14,8 +14,8 @@ import qualified System.Metrics.Distribution as Distribution
 import Lens.Micro
 import Data.Int
 
-import Types
-import Utils
+import Network.Concurrent.Ampf.Types
+import Network.Concurrent.Ampf.Utils
 
 setupMetrics :: Int -> IO Metrics.Metrics
 setupMetrics port = do

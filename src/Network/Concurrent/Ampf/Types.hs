@@ -8,7 +8,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE Rank2Types #-}
 
-module Types where
+module Network.Concurrent.Ampf.Types where
 
 import Control.Monad.Reader
 import Control.Monad.State as St

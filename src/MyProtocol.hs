@@ -5,7 +5,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module Tests where
+module MyProtocol where
 
 import Control.Monad
 import Control.Monad.Reader hiding (reader)
@@ -31,18 +31,13 @@ import System.Log.Heavy
 import Data.Text.Format.Heavy
 import System.IO
 
-import Types
-import Connection
-import Pool
-import Logging
-import Matcher
-import Framework
-import Monitoring
+import Network.Concurrent.Ampf
+import Network.Concurrent.Ampf.Connection (LeadingSize (..))
 
 data MyProtocol = MyProtocol
 
 instance Protocol MyProtocol where
-  type ProtocolFrame MyProtocol = SimpleFrame
+  type ProtocolFrame MyProtocol = LeadingSize
   data ProtocolMessage MyProtocol = 
     MyMessage {
         mIsResponse :: Bool
@@ -55,7 +50,7 @@ instance Protocol MyProtocol where
 
   type ProtocolState MyProtocol = Int
 
-  getFrame _ = return SimpleFrame
+  getFrame _ = return LeadingSize
 
   -- initProtocol (MySettings key) = putP key
 

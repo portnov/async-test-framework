@@ -2,7 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
 
-module Logging where
+module Network.Concurrent.Ampf.Logging where
 
 import Control.Monad
 import Control.Monad.Trans
@@ -30,7 +30,7 @@ import Language.Haskell.TH hiding (match)
 import Language.Haskell.TH.Syntax (qLocation)
 import qualified Language.Haskell.TH.Lift as TH
 
-import Types
+import Network.Concurrent.Ampf.Types
 
 logSettings path =
   filtering defaultLogFilter $

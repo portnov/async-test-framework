@@ -1,4 +1,4 @@
-name:                async-test-framework
+name:                ampf
 version:             0.1.0.0
 github:              "portnov/async-test-framework"
 license:             BSD3
@@ -59,4 +59,11 @@ executables:
     - -threaded
     - -rtsopts
     - '"-with-rtsopts=-N -T"'
-    dependencies: []
+    dependencies:
+      - ampf
+
+library:
+  source-dirs: src/
+  ghc-options:
+    - -fwarn-unused-imports
+

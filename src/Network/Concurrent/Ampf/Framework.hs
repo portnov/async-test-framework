@@ -5,7 +5,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module Framework where
+module Network.Concurrent.Ampf.Framework where
 
 import Control.Monad
 import Control.Monad.Reader hiding (reader)
@@ -37,12 +37,11 @@ import Lens.Micro
 import System.Environment
 import System.IO
 
-import Types
-import Connection
-import Pool
-import Logging
-import Matcher
-import Monitoring (globalCollector)
+import Network.Concurrent.Ampf.Types
+import Network.Concurrent.Ampf.Connection
+import Network.Concurrent.Ampf.Logging
+import Network.Concurrent.Ampf.Matcher
+import Network.Concurrent.Ampf.Monitoring (globalCollector)
 
 askPortsCount :: ProcessMonad m => m Int
 askPortsCount = do

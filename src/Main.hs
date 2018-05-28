@@ -3,11 +3,9 @@ module Main where
 import qualified Control.Monad.Metrics as Metrics
 import System.Environment
 
-import Types
-import Connection
-import Tests
-import Monitoring
-import Config
+import Network.Concurrent.Ampf
+
+import MyProtocol
 
 run :: FilePath -> (Metrics.Metrics -> ProcessConfig -> IO ()) -> IO ()
 run path runner = do

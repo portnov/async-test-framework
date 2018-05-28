@@ -1,7 +1,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Connection where
+module Network.Concurrent.Ampf.Connection where
 
 import Control.Monad
 import Control.Monad.Trans
@@ -19,10 +19,10 @@ import Network.Socket.ByteString.Lazy (recv, sendAll)
 import Text.Printf
 import Data.Text.Format.Heavy
 
-import Types
-import Logging
+import Network.Concurrent.Ampf.Types
+import Network.Concurrent.Ampf.Logging
 
-data SimpleFrame = SimpleFrame
+data LeadingSize = LeadingSize
   deriving (Eq, Show)
 
 readN :: Word16 -> Socket -> IO L.ByteString
@@ -37,7 +37,7 @@ readN sz sock = go sz
              return $ d `L.append` rest
         else return d
 
-instance IsFrame SimpleFrame where
+instance IsFrame LeadingSize where
   recvMessage sock _ = do
     -- putStrLn $ "waiting for message frame on " ++ show sock
     lenStr <- readN 2 sock

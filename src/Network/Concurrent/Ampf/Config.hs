@@ -1,13 +1,13 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Config where
+module Network.Concurrent.Ampf.Config where
 
 import Data.Aeson
 import Data.Yaml
 import Data.Word
 import Network.Socket
 
-import Types
+import Network.Concurrent.Ampf.Types
 
 instance FromJSON ProcessConfig where
   parseJSON = withObject "Config" $ \v -> ProcessConfig

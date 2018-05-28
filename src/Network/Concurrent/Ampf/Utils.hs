@@ -1,9 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleInstances #-}
 
-module Utils where
+module Network.Concurrent.Ampf.Utils where
 
-import Types
+import Network.Concurrent.Ampf.Types
 
 getAllWriterNames :: ProcessMonad m => m [String]
 getAllWriterNames = do
