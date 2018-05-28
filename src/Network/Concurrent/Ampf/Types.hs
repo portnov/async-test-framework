@@ -12,14 +12,10 @@ module Network.Concurrent.Ampf.Types where
 
 import Control.Monad.Reader
 import Control.Monad.State as St
-import Control.Monad.Trans.Control
 import Control.Monad.Catch 
-import Control.Concurrent
-import Control.Concurrent.STM
 import Control.Distributed.Process hiding (bracket, mask, catch)
 import qualified Control.Monad.Metrics as Metrics
 import qualified Data.Map as M
-import qualified Data.Text as T
 import qualified Data.Text.Lazy as TL
 import Data.Typeable
 import Data.Binary
@@ -28,9 +24,7 @@ import Data.IORef
 import qualified Data.ByteString.Lazy as L
 import Network.Socket
 import System.Log.Heavy
-import System.Log.Heavy.Instances.Binary
-import System.Log.Heavy.Instances.Throw
-import Data.Text.Format.Heavy
+import System.Log.Heavy.Instances.Binary () -- import instances only
 import GHC.Generics
 
 data ExtPort =

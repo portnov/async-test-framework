@@ -7,16 +7,11 @@ import Control.Monad
 import Control.Monad.Trans
 -- import Control.Exception.Lifted (bracket)
 import Control.Monad.Catch (bracket)
-import Control.Concurrent
-import Control.Distributed.Process hiding (bracket)
 import Control.Distributed.Process.MonadBaseControl () -- instances only
 import Data.Binary
-import Data.Word
-import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as L
 import Network.Socket hiding (recv)
 import Network.Socket.ByteString.Lazy (recv, sendAll)
-import Text.Printf
 import Data.Text.Format.Heavy
 
 import Network.Concurrent.Ampf.Types

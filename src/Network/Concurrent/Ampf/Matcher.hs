@@ -7,31 +7,18 @@ module Network.Concurrent.Ampf.Matcher where
 
 import Control.Monad
 import Control.Monad.Reader hiding (reader)
-import Control.Monad.Trans
 import Control.Concurrent
 import Control.Distributed.Process hiding (bracket, finally)
-import Control.Distributed.Process.Node
-import Control.Monad.Catch (bracket, finally)
 import qualified Control.Monad.Metrics as Metrics
 import Data.Binary
-import Data.Maybe
 import qualified Data.Map as M
-import qualified Data.ByteString.Lazy as L
 import Network.Socket (PortNumber)
-import Data.String
 import GHC.Generics
-import System.Random
-import Text.Printf
-import System.Log.Heavy
--- import System.Log.Heavy.Shortcuts
-import Data.Text.Format.Heavy
 import Data.Typeable
 import Data.IORef
 import Data.Time.Clock
 
 import Network.Concurrent.Ampf.Types
-import Network.Concurrent.Ampf.Connection
-import Network.Concurrent.Ampf.Logging
 
 data WhoSentRq = WhoSentRq ProcessId MatchKey
   deriving (Typeable, Generic)

@@ -10,30 +10,20 @@ module Network.Concurrent.Ampf.Framework where
 import Control.Monad
 import Control.Monad.Reader hiding (reader)
 import Control.Monad.State as St
-import Control.Monad.Trans
+import Control.Monad.Catch (finally)
 import Control.Concurrent
 import Control.Distributed.Process hiding (bracket, finally)
-import Control.Distributed.Process.Node
-import Control.Monad.Catch (bracket, finally)
 import qualified Control.Monad.Metrics as Metrics
 import Data.Typeable
 import Data.Binary
-import Data.Maybe
 import Data.IORef
 import qualified Data.HashMap.Strict as H
-import qualified Data.ByteString.Lazy as L
-import Data.String
 import Network.Socket hiding (send)
-import Network.Transport.TCP (createTransport, defaultTCPParameters)
-import GHC.Generics
-import System.Random
-import Text.Printf
 import System.Log.Heavy
-import qualified System.Metrics.Distribution.Internal as EKG
 import qualified System.Metrics as EKG
--- import System.Log.Heavy.Shortcuts
 import Data.Text.Format.Heavy
 import Lens.Micro
+import System.Random
 import System.Environment
 import System.IO
 

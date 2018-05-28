@@ -7,28 +7,14 @@ module Network.Concurrent.Ampf.Logging where
 import Control.Monad
 import Control.Monad.Trans
 import Control.Monad.Logger (liftLoc, defaultLoc)
-import Control.Concurrent
 import Control.Distributed.Process hiding (bracket, finally)
-import Control.Distributed.Process.Node
 import Control.Distributed.Process.MonadBaseControl () -- instances only
-import Control.Monad.Catch (bracket, finally)
-import Data.Binary
-import Data.Maybe
-import qualified Data.ByteString.Lazy as L
 import qualified Data.Text.Lazy as TL
-import Data.String
-import Network.Socket
-import Network.Transport.TCP (createTransport, defaultTCPParameters)
-import GHC.Generics
-import System.Random
-import Text.Printf
-import System.Log.Heavy
-import System.Log.Heavy.TH ()
--- import System.Log.Heavy.Shortcuts
-import Data.Text.Format.Heavy
 import Language.Haskell.TH hiding (match)
 import Language.Haskell.TH.Syntax (qLocation)
 import qualified Language.Haskell.TH.Lift as TH
+import System.Log.Heavy
+import System.Log.Heavy.TH ()
 
 import Network.Concurrent.Ampf.Types
 
