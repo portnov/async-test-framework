@@ -1,8 +1,8 @@
 is-generator: true
-workers: 100
+workers: 200
 processor-delay-min: 0
 processor-delay-max: 200
 monitor-port: 8000
 matcher-timeout: 2000
 generator-timeout: 2100
-
+log-file: client.log

@@ -106,6 +106,7 @@ data ProcessConfig = ProcessConfig {
     pcIsGenerator :: Bool,
     pcGeneratorEnabled :: Bool,
     pcGeneratorTargetRps :: Int,
+    pcHost :: String,
     pcMinPort :: PortNumber,
     pcMaxPort :: PortNumber,
     pcWorkersCount :: Int,
@@ -114,7 +115,9 @@ data ProcessConfig = ProcessConfig {
     pcProcessorMaxDelay :: Int,
     pcEkgPort :: PortNumber,
     pcMatcherTimeout :: Int,
-    pcGeneratorTimeout :: Int
+    pcGeneratorTimeout :: Int,
+    pcLogFilePath :: FilePath,
+    pcUseRepl :: Bool
   }
   deriving (Show)
 

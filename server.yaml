@@ -3,4 +3,5 @@ workers: 400
 processor-delay-min: 100
 processor-delay-max: 500
 monitor-port: 8080
+log-file: server.log
 

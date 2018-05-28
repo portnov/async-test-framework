@@ -15,7 +15,7 @@ import Lens.Micro
 import Data.Int
 
 import Types
-import Framework
+import Utils
 
 setupMetrics :: Int -> IO Metrics.Metrics
 setupMetrics port = do

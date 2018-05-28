@@ -34,12 +34,15 @@ import qualified System.Metrics as EKG
 -- import System.Log.Heavy.Shortcuts
 import Data.Text.Format.Heavy
 import Lens.Micro
+import System.Environment
+import System.IO
 
 import Types
 import Connection
 import Pool
 import Logging
 import Matcher
+import Monitoring (globalCollector)
 
 askPortsCount :: ProcessMonad m => m Int
 askPortsCount = do
@@ -62,17 +65,6 @@ sendAllWorkers msg = do
   forM_ [0 .. count-1] $ \idx -> do
     let name = "worker:" ++ show idx
     liftP $ nsend name msg
-
-getAllWriterNames :: ProcessMonad m => m [String]
-getAllWriterNames = do
-    minPort <- asksConfig pcMinPort
-    maxPort <- asksConfig pcMaxPort
-    return ["writer:" ++ show port | port <- [minPort .. maxPort]]
-
-getAllWorkerNames :: ProcessMonad m => m [String]
-getAllWorkerNames = do
-  count <- asksConfig pcWorkersCount
-  return ["worker:" ++ show i | i <- [0 .. count-1]]
 
 sendWriter :: (ProcessMonad m, IsMessage msg) => Maybe PortNumber -> msg -> m ()
 sendWriter mbPort msg = do
@@ -258,4 +250,97 @@ processor proto myIndex = do
       response <- processRq request
       sendWriter (Just srcPort) response
       $info "response sent: #{}" (Single $ getMatchKey response)
+
+repl :: ProtocolM st ()
+repl = do
+  liftIO $ hSetBuffering stdout NoBuffering
+  liftIO $ putStr "> "
+  command <- liftIO getLine
+  case words command of
+    ["start"] -> do
+      startGenerator
+      repl
+    ["stop"] -> do
+      stopGenerator
+      repl
+    ["rps", ns] -> do
+      let rps = read ns
+      setTargetRps rps
+      repl
+    [] -> repl
+    [""] -> repl
+    ["exit"] -> return ()
+    ["quit"] -> return ()
+    _ -> do
+      liftIO $ putStrLn "unknown command"
+      repl
+
+runSite :: Protocol proto
+        => Bool            -- ^ True for client side, False for server side
+        -> proto
+        -> ProtocolSettings proto
+        -> Metrics.Metrics
+        -> ProcessConfig
+        -> Process ()
+runSite isClient proto settings metrics cfg = do
+
+    let connector = if isClient
+                      then clientConnection
+                      else serverConnection
+
+    let minPort = pcMinPort cfg
+        maxPort = pcMaxPort cfg
+
+    rps <- liftIO $ newIORef (0,0)
+    let st0 = initialState settings
+        st = ProcessState [] metrics cfg (pcGeneratorEnabled cfg) 1000 (pcGeneratorTargetRps cfg) rps st0
+
+    spawnLocal $ logWriter (pcLogFilePath cfg)
+    myName <- liftIO getProgName
+
+    runAProcess st $ withLogVariable "process" myName $ do
+        spawnAProcess "monitor" 0 $ do
+            liftP $ register "monitor" =<< getSelfPid
+            globalCollector
+
+        spawnAProcess "rps controller" 0 rpsController
+
+        nWorkers <- asksConfig pcWorkersCount
+        isGenerator <- asksConfig pcIsGenerator
+        matcherTimeout <- asksConfig pcMatcherTimeout
+        when (not isGenerator) $ do
+          forM_ [0 .. nWorkers-1] $ \idx ->
+              spawnAProcess "processor" idx $ processor proto idx
+
+        liftIO $ threadDelay $ 100*1000
+          
+        forM_ [minPort .. maxPort] $ \portNumber -> do
+            spawnAProcess "port" portNumber $ connector (pcHost cfg) portNumber $ \extPort -> do
+              let portNumber = getPortNumber extPort
+              m <- lift $ spawnLocal (matcher portNumber matcherTimeout)
+              lift $ link m
+              w <- spawnAProcess "writer" portNumber (writer proto extPort)
+              lift $ link w
+              $debug "{} spawned writer" (Single myName)
+              r <- spawnAProcess "reader" portNumber (reader proto extPort)
+              lift $ link r
+              $debug "{} spawned reader" (Single myName)
+              return ()
+
+        liftIO $ threadDelay $ 100*1000
+
+        $debug "hello" ()
+        when isGenerator $ do
+          forM_ [0 .. nWorkers-1] $ \idx ->
+              spawnAProcess "generator" idx $ generator proto idx
+
+        return ()
+
+    if pcUseRepl cfg
+      then runAProcess st $ withLogVariable "process" ("repl" :: String) repl
+      else liftIO $ do
+        putStrLn "press return to exit..."
+        getLine
+        return ()
+
 

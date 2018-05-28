@@ -14,6 +14,7 @@ instance FromJSON ProcessConfig where
     <$> v .: "is-generator"
     <*> v .:? "generator-enabled" .!= False
     <*> v .:? "generator-target-rps" .!= 100
+    <*> v .:? "host" .!= "127.0.0.1"
     <*> v .:? "min-port" .!= 9090
     <*> v .:? "max-port" .!= 9100
     <*> v .:? "workers" .!= 10
@@ -23,6 +24,8 @@ instance FromJSON ProcessConfig where
     <*> v .:? "monitor-port" .!= 8000
     <*> v .:? "matcher-timeout" .!= 1500
     <*> v .:? "generator-timeout" .!= 2
+    <*> v .: "log-file"
+    <*> v .:? "enable-repl" .!= True
 
 instance FromJSON PortNumber where
   parseJSON o = fromIntegral `fmap` (parseJSON o :: Parser Word16)
