@@ -18,9 +18,13 @@ import System.Log.Heavy.TH ()
 
 import Network.Concurrent.Ampf.Types
 
-logSettings path =
-  filtering defaultLogFilter $
-    (defFileSettings path) {lsFormat = "{time} [{level}] {source} {process} {thread}#{index}: {message}\n"}
+defaultLogSettings :: ProcessConfig -> LogBackendSettings (Filtering FastLoggerBackend) 
+defaultLogSettings cfg =
+  let fltr = [([], pcLogLevel cfg)]
+  in filtering fltr $
+          (defFileSettings (pcLogFilePath cfg)) {
+            lsFormat = "{time} [{level}] {source} {process} {thread}#{index}: {message}\n"
+          }
 
 putMessage :: Level -> Q Exp
 putMessage level = [| \msg vars -> do
@@ -79,11 +83,10 @@ reportError = putMessage error_level
 fatal :: Q Exp
 fatal = putMessage fatal_level
 
-logWriter :: FilePath -> Process()
-logWriter path = do
+logWriter :: IsLogBackend b => LogBackendSettings b -> Process()
+logWriter settings = do
     self <- getSelfPid
     reregister "logger" self
-    let settings = logSettings path
     withLoggingT (LoggingSettings settings) $ forever $ do
       logger <- getLogger
       lift $ receiveWait

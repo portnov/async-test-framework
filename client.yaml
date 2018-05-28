@@ -6,3 +6,5 @@ monitor-port: 8000
 matcher-timeout: 2000
 generator-timeout: 2100
 log-file: client.log
+log-level: debug
+

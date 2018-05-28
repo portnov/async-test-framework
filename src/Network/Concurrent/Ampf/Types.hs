@@ -111,6 +111,7 @@ data ProcessConfig = ProcessConfig {
     pcMatcherTimeout :: Int,
     pcGeneratorTimeout :: Int,
     pcLogFilePath :: FilePath,
+    pcLogLevel :: Level,
     pcUseRepl :: Bool
   }
   deriving (Show)

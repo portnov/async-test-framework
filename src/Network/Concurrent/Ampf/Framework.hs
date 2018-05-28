@@ -72,7 +72,7 @@ sendWriter mbPort msg = do
 
 reader :: forall proto. Protocol proto => proto -> ExtPort -> ProtocolM (ProtocolState proto) ()
 reader proto port = do
-    $debug "hello from reader: {}" (Single $ show port)
+    -- $ debug "hello from reader: {}" (Single $ show port)
     loop `finally` closeServerConnection
   where
     loop :: ProtocolM (ProtocolState proto) ()
@@ -109,7 +109,7 @@ writer proto port = do
     loop :: ProtocolM (ProtocolState proto) ()
     loop =
         forever $ do
-          $debug "hello from writer: {}" (Single $ show port)
+          -- $ debug "hello from writer: {}" (Single $ show port)
           msg <- liftP expect :: ProtocolM (ProtocolState proto) (ProtocolMessage proto)
           Metrics.increment "writer.sent.messages"
           frame <- getFrame proto
@@ -174,7 +174,7 @@ calcGeneratorDelay targetRps = do
   let deltaRps = targetRps - currentRps
       newDelay = max 1 $ round $ fromIntegral currentDelay - 500 * fromIntegral deltaRps
   modify $ \st -> st {psGeneratorDelay = newDelay}
-  $info "Current RPS {}, target RPS {}, old delay {}, new delay {}"
+  $debug "Current RPS {}, target RPS {}, old delay {}, new delay {}"
       (currentRps, targetRps, currentDelay, newDelay)
   return newDelay
 
@@ -196,7 +196,7 @@ generator proto myIndex = do
   let myName = "worker:" ++ show myIndex
   liftP $ register myName self
 
-  $debug "hello from client worker #{}" (Single myIndex)
+  $debug "starting generator #{}" (Single myIndex)
   forever $ do
     (enabled, targetRps) <- getGeneratorSettings
     -- liftIO $ putStrLn $ show enabled
@@ -208,7 +208,7 @@ generator proto myIndex = do
             request <- generateRq proto myIndex 
             let key = getMatchKey request
             sendWriter Nothing request
-            $info "sent request #{}" (Single key)
+            $debug "sent request #{}" (Single key)
             mbResponse <- receiveResponse key :: ProtocolM (ProtocolState proto) (Maybe (ProtocolMessage proto))
             case mbResponse of
               Nothing -> do
@@ -217,7 +217,7 @@ generator proto myIndex = do
               Just response -> do
                 when (getMatchKey response /= key) $
                     fail "Suddenly received incorrect reply"
-                $info "response received: #{}" (Single $ getMatchKey response)
+                $debug "response received: #{}" (Single $ getMatchKey response)
       else
         liftIO $ threadDelay 1000
 
@@ -226,10 +226,10 @@ processor proto myIndex = do
   self <- liftP getSelfPid
   let myName = "worker:" ++ show myIndex
   liftP $ register myName self
-  $debug "hello from server worker #{}" (Single myIndex)
+  $debug "starting processor worker #{}" (Single myIndex)
   forever $ do
     (srcPort, request) <- liftP expect :: ProtocolM (ProtocolState proto) (PortNumber, ProtocolMessage proto)
-    $info "request received: #{}" (Single $ getMatchKey request)
+    $debug "request received: #{}" (Single $ getMatchKey request)
     Metrics.timed "processor.requests.duration" $ do
       minDelay <- asksConfig pcProcessorMinDelay
       maxDelay <- asksConfig pcProcessorMaxDelay
@@ -237,7 +237,7 @@ processor proto myIndex = do
       liftIO $ threadDelay $ delay * 1000
       response <- processRq request
       sendWriter (Just srcPort) response
-      $info "response sent: #{}" (Single $ getMatchKey response)
+      $debug "response sent: #{}" (Single $ getMatchKey response)
 
 repl :: ProtocolM st ()
 repl = do
@@ -283,7 +283,7 @@ runSite isClient proto settings metrics cfg = do
     let st0 = initialState settings
         st = ProcessState [] metrics cfg (pcGeneratorEnabled cfg) 1000 (pcGeneratorTargetRps cfg) rps st0
 
-    spawnLocal $ logWriter (pcLogFilePath cfg)
+    spawnLocal $ logWriter (defaultLogSettings cfg)
     myName <- liftIO getProgName
 
     runAProcess st $ withLogVariable "process" myName $ do
