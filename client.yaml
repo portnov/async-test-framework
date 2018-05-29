@@ -1,4 +1,5 @@
 is-generator: true
+is-processor: false
 workers: 100
 processor-delay-min: 0
 processor-delay-max: 100

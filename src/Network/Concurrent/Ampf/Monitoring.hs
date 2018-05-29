@@ -43,7 +43,7 @@ globalCollector = do
     metrics <- Metrics.getMetrics
     let store = metrics ^. Metrics.metricsStore
     writerMailboxSize <- liftIO $ EKG.createGauge "writer.mailbox.size" store
-    workerMailboxSize <- liftIO $ EKG.createGauge "worker.mailbox.size" store
+    workerMailboxSize <- liftIO $ EKG.createGauge "processor.mailbox.size" store
     matcherSizeDistrib <- liftIO $ EKG.createDistribution "matcher.registration.size" store
     forever $ do
       delay <- asksConfig pcMonitorDelay
@@ -54,7 +54,7 @@ globalCollector = do
       writerNames <- getAllWriterNames
       writersSize <- collectQueueSize writerNames
       liftIO $ Gauge.set writerMailboxSize writersSize
-      workerNames <- getAllWorkerNames
+      workerNames <- getAllProcessorNames
       workersSize <- collectQueueSize workerNames
       liftIO $ Gauge.set workerMailboxSize workersSize
 

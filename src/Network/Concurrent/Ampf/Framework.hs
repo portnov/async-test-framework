@@ -39,20 +39,20 @@ askPortsCount = do
   maxPort <- asksConfig pcMaxPort
   return $ fromIntegral $ maxPort - minPort + 1
 
-sendWorker :: (ProcessMonad m, IsMessage msg) => ExtPort -> Maybe ProcessId -> msg -> m ()
-sendWorker srcPort Nothing msg = do
+sendWorker :: (ProcessMonad m, IsMessage msg) => String -> ExtPort -> Maybe ProcessId -> msg -> m ()
+sendWorker workerType srcPort Nothing msg = do
   count <- asksConfig pcWorkersCount
   idx <- liftIO $ randomRIO (0, count-1)
-  let name = "worker:" ++ show idx
+  let name = workerType ++ ":" ++ show idx
   liftP $ nsend name (getPortNumber srcPort, msg)
-sendWorker srcPort (Just worker) msg = do
+sendWorker _ srcPort (Just worker) msg = do
   liftP $ send worker (getPortNumber srcPort, msg)
 
-sendAllWorkers :: (Binary msg, Typeable msg, ProcessMonad m) => msg -> m ()
-sendAllWorkers msg = do
+sendAllGenerators :: (Binary msg, Typeable msg, ProcessMonad m) => msg -> m ()
+sendAllGenerators msg = do
   count <- asksConfig pcWorkersCount
   forM_ [0 .. count-1] $ \idx -> do
-    let name = "worker:" ++ show idx
+    let name = "generator:" ++ show idx
     liftP $ nsend name msg
 
 sendWriter :: (ProcessMonad m, IsMessage msg) => Maybe PortNumber -> msg -> m ()
@@ -87,10 +87,10 @@ reader proto port = do
                   Nothing -> do
                     $reportError "Late response receive for request #{}" (Single $ getMatchKey msg)
                     Metrics.increment "generator.requests.late"
-                  Just requester -> sendWorker port (Just requester) msg
+                  Just requester -> sendWorker "generator" port (Just requester) msg
               else do
                   Metrics.increment "reader.received.requests"
-                  sendWorker port Nothing msg
+                  sendWorker "processor" port Nothing msg
 
     closeServerConnection :: ProtocolM (ProtocolState proto) ()
     closeServerConnection =
@@ -155,15 +155,15 @@ getGeneratorSettings = do
 
 startGenerator :: ProtocolM st ()
 startGenerator =
-  sendAllWorkers StartGenerator
+  sendAllGenerators StartGenerator
 
 stopGenerator :: ProtocolM st ()
 stopGenerator =
-  sendAllWorkers StopGenerator
+  sendAllGenerators StopGenerator
 
 setTargetRps :: Int -> ProtocolM st ()
 setTargetRps rps =
-  sendAllWorkers (SetTargetRps rps)
+  sendAllGenerators (SetTargetRps rps)
 
 calcGeneratorDelay :: Int -> ProtocolM st Int
 calcGeneratorDelay targetRps = do
@@ -193,7 +193,7 @@ rpsController = forever $ do
 generator :: forall proto. Protocol proto => proto -> Int -> ProtocolM (ProtocolState proto) ()
 generator proto myIndex = do
   self <- liftP getSelfPid
-  let myName = "worker:" ++ show myIndex
+  let myName = "generator:" ++ show myIndex
   liftP $ register myName self
 
   $debug "starting generator #{}" (Single myIndex)
@@ -224,7 +224,7 @@ generator proto myIndex = do
 processor :: forall proto. Protocol proto => proto -> Int -> ProtocolM (ProtocolState proto) ()
 processor proto myIndex = do
   self <- liftP getSelfPid
-  let myName = "worker:" ++ show myIndex
+  let myName = "processor:" ++ show myIndex
   liftP $ register myName self
   $debug "starting processor worker #{}" (Single myIndex)
   forever $ do
@@ -295,8 +295,9 @@ runSite isClient proto settings metrics cfg = do
 
         nWorkers <- asksConfig pcWorkersCount
         isGenerator <- asksConfig pcIsGenerator
+        isProcessor <- asksConfig pcIsProcessor
         matcherTimeout <- asksConfig pcMatcherTimeout
-        when (not isGenerator) $ do
+        when isProcessor $ do
           forM_ [0 .. nWorkers-1] $ \idx ->
               spawnAProcess "processor" idx $ processor proto idx
 

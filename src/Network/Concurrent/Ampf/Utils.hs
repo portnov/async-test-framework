@@ -16,3 +16,13 @@ getAllWorkerNames = do
   count <- asksConfig pcWorkersCount
   return ["worker:" ++ show i | i <- [0 .. count-1]]
 
+getAllProcessorNames :: ProcessMonad m => m [String]
+getAllProcessorNames = do
+  count <- asksConfig pcWorkersCount
+  return ["processor:" ++ show i | i <- [0 .. count-1]]
+
+getAllGeneratorNames :: ProcessMonad m => m [String]
+getAllGeneratorNames = do
+  count <- asksConfig pcWorkersCount
+  return ["generator:" ++ show i | i <- [0 .. count-1]]
+

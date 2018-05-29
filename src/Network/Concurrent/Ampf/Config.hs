@@ -15,6 +15,7 @@ import Network.Concurrent.Ampf.Types
 instance FromJSON ProcessConfig where
   parseJSON = withObject "Config" $ \v -> ProcessConfig
     <$> v .: "is-generator"
+    <*> v .: "is-processor"
     <*> v .:? "generator-enabled" .!= False
     <*> v .:? "generator-target-rps" .!= 100
     <*> v .:? "host" .!= "127.0.0.1"
