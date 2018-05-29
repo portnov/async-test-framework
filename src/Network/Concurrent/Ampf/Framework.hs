@@ -235,7 +235,7 @@ processor proto myIndex = do
       maxDelay <- asksConfig pcProcessorMaxDelay
       delay <- liftIO $ randomRIO (minDelay, maxDelay)
       liftIO $ threadDelay $ delay * 1000
-      response <- processRq request
+      response <- processRq proto request
       sendWriter (Just srcPort) response
       $debug "response sent: #{}" (Single $ getMatchKey response)
 

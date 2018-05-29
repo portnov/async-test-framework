@@ -56,7 +56,7 @@ class (Monad m, MonadIO m, HasLogContext m, Metrics.MonadMetrics m, MonadMask m)
 class (IsFrame (ProtocolFrame proto), IsMessage (ProtocolMessage proto))
     => Protocol proto where
   type ProtocolFrame proto
-  data ProtocolMessage proto
+  type ProtocolMessage proto
   data ProtocolSettings proto
   type ProtocolState proto
 
@@ -66,11 +66,11 @@ class (IsFrame (ProtocolFrame proto), IsMessage (ProtocolMessage proto))
 
   initialState :: ProtocolSettings proto -> ProtocolState proto
 
-  makeLogonMsg :: ProtocolM (ProtocolState proto) (ProtocolMessage proto)
+  makeLogonMsg :: proto -> ProtocolM (ProtocolState proto) (ProtocolMessage proto)
 
   generateRq :: proto -> Int -> ProtocolM (ProtocolState proto) (ProtocolMessage proto)
 
-  processRq :: ProtocolMessage proto -> ProtocolM (ProtocolState proto) (ProtocolMessage proto)
+  processRq :: proto -> ProtocolMessage proto -> ProtocolM (ProtocolState proto) (ProtocolMessage proto)
 
 data PoolSettings = PoolSettings {
     pIsClient :: Bool

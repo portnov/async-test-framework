@@ -20,15 +20,17 @@ import Network.Concurrent.Ampf.Connection (LeadingSize (..))
 
 data MyProtocol = MyProtocol
 
-instance Protocol MyProtocol where
-  type ProtocolFrame MyProtocol = LeadingSize
-  data ProtocolMessage MyProtocol = 
+data MyMessage = 
     MyMessage {
         mIsResponse :: Bool
       , mKey :: Int
       , mPayload :: L.ByteString
       }
       deriving (Eq, Show, Generic)
+
+instance Protocol MyProtocol where
+  type ProtocolFrame MyProtocol = LeadingSize
+  type ProtocolMessage MyProtocol = MyMessage
 
   data ProtocolSettings MyProtocol = MySettings Int
 
@@ -40,7 +42,7 @@ instance Protocol MyProtocol where
 
   initialState (MySettings key) = key
 
-  makeLogonMsg = return $ MyMessage False 0 "logon"
+  makeLogonMsg _ = return $ MyMessage False 0 "logon"
 
   generateRq _ myIndex = do
     key <- getP
@@ -49,14 +51,12 @@ instance Protocol MyProtocol where
     let key' = key * n + myIndex
     return $ MyMessage False key' "request"
 
-  processRq msg = do
+  processRq _ msg = do
     return $ msg {mIsResponse = True, mPayload = "response"}
 
-type MyMessage = ProtocolMessage MyProtocol
+instance Binary MyMessage where
 
-instance Binary (ProtocolMessage MyProtocol) where
-
-instance IsMessage (ProtocolMessage MyProtocol) where
+instance IsMessage MyMessage where
   isResponse = mIsResponse
   isAdministrative _ = False
   getMatchKey m = fromString (show $ mKey m)
