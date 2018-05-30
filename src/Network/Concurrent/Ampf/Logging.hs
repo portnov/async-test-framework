@@ -1,6 +1,8 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleInstances #-}
 
 module Network.Concurrent.Ampf.Logging where
 
@@ -25,6 +27,9 @@ defaultLogSettings cfg =
           (defFileSettings (pcLogFilePath cfg)) {
             lsFormat = "{time} [{level}] {source} {process} {thread}#{index}: {message}\n"
           }
+
+instance HasLoggingSettings (Filtering FastLoggerBackend) ProcessConfig where
+  getLoggingSettings = defaultLogSettings
 
 putMessage :: Level -> Q Exp
 putMessage level = [| \msg vars -> do

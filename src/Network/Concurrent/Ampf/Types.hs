@@ -7,6 +7,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE Rank2Types #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 
 module Network.Concurrent.Ampf.Types where
 
@@ -116,6 +117,45 @@ data ProcessConfig = ProcessConfig {
     pcUseRepl :: Bool
   }
   deriving (Show)
+
+class HasNetworkConfig cfg where
+  getHostname :: cfg -> String
+  getMinPort :: cfg -> PortNumber
+  getMaxPort :: cfg -> PortNumber
+
+instance HasNetworkConfig ProcessConfig where
+  getHostname = pcHost
+  getMinPort = pcMinPort
+  getMaxPort = pcMaxPort
+
+class HasNetworkConfig cfg => HasGeneratorConfig cfg where
+  isGenerator :: cfg -> Bool
+  runGeneratorAtStartup :: cfg -> Bool
+  generatorTargetRps :: cfg -> Int
+  generatorWorkersCount :: cfg -> Int
+  generatorRequestTimeout :: cfg -> Int
+  generatorMatchTimeout :: cfg -> Int
+
+instance HasGeneratorConfig ProcessConfig where
+  isGenerator = pcIsGenerator
+  runGeneratorAtStartup = pcGeneratorEnabled
+  generatorTargetRps = pcGeneratorTargetRps
+  generatorWorkersCount = pcWorkersCount
+  generatorRequestTimeout = pcGeneratorTimeout
+  generatorMatchTimeout = pcMatcherTimeout
+
+class HasNetworkConfig cfg => HasProcessorConfig cfg where
+  isProcessor :: cfg -> Bool
+  processorMinDelay :: cfg -> Int
+  processorMaxDelay :: cfg -> Int
+
+instance HasProcessorConfig ProcessConfig where
+  isProcessor = pcIsProcessor
+  processorMinDelay = pcProcessorMinDelay
+  processorMaxDelay = pcProcessorMaxDelay
+
+class HasLoggingSettings backend cfg where
+  getLoggingSettings :: cfg -> LogBackendSettings backend
 
 -- this is ProtocolM-specific
 data ProcessState st = ProcessState {
