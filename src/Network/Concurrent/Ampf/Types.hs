@@ -45,6 +45,12 @@ class (Binary m, Typeable m) => IsMessage m where
   isAdministrative :: m -> Bool
   getMatchKey :: m -> MatchKey
 
+  isRequestDeclinedResponse :: m -> Bool
+  isRequestDeclinedResponse m = not (isRequestApprovedResponse m)
+
+  isRequestApprovedResponse :: m -> Bool
+  isRequestApprovedResponse m = not (isRequestDeclinedResponse m)
+
 class IsFrame f where
   recvMessage :: IsMessage m => Socket -> f -> IO m
   sendMessage :: IsMessage m => Socket -> f -> m -> IO ()

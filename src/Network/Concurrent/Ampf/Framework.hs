@@ -218,6 +218,11 @@ generator proto myIndex = do
                 when (getMatchKey response /= key) $
                     fail "Suddenly received incorrect reply"
                 $debug "response received: #{}" (Single $ getMatchKey response)
+                if isRequestDeclinedResponse response
+                  then do
+                       Metrics.increment "generator.requests.declined"
+                       $debug "request declined: #{}" (Single $ getMatchKey response)
+                  else Metrics.increment "generator.requests.approved"
       else
         liftIO $ threadDelay 1000
 

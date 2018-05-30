@@ -58,6 +58,7 @@ instance Binary MyMessage where
 
 instance IsMessage MyMessage where
   isResponse = mIsResponse
+  isRequestDeclinedResponse _ = False
   isAdministrative _ = False
   getMatchKey m = fromString (show $ mKey m)
 
