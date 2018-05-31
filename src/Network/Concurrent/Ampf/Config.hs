@@ -56,7 +56,7 @@ instance FromJSON Level where
   parseJSON (Aeson.String "disable") = return disable_logging
   parseJSON invalid = Aeson.typeMismatch "logging level" invalid
 
-readConfig :: FilePath -> IO ProcessConfig
+readConfig :: FromJSON cfg => FilePath -> IO cfg
 readConfig path = do
   r <- decodeFileEither path
   case r of

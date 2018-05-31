@@ -10,9 +10,9 @@ module Network.Concurrent.Ampf.Framework where
 import Control.Monad
 import Control.Monad.Reader hiding (reader)
 import Control.Monad.State as St
-import Control.Monad.Catch (finally)
+import Control.Monad.Catch (catch, finally, SomeException)
 import Control.Concurrent
-import Control.Distributed.Process hiding (bracket, finally)
+import Control.Distributed.Process hiding (bracket, finally, catch)
 import qualified Control.Monad.Metrics as Metrics
 import Data.Typeable
 import Data.Binary
@@ -31,6 +31,7 @@ import Network.Concurrent.Ampf.Types
 import Network.Concurrent.Ampf.Connection
 import Network.Concurrent.Ampf.Logging
 import Network.Concurrent.Ampf.Matcher
+import Network.Concurrent.Ampf.Utils
 import Network.Concurrent.Ampf.Monitoring (globalCollector)
 
 askPortsCount :: ProcessMonad m => m Int
@@ -72,7 +73,8 @@ sendWriter mbPort msg = do
 
 reader :: forall proto. Protocol proto => proto -> ExtPort -> ProtocolM (ProtocolState proto) ()
 reader proto port = do
-    -- $ debug "hello from reader: {}" (Single $ show port)
+    self <- liftP getSelfPid
+    $debug "starting reader @{}: {}" (show port, show self)
     loop `finally` closeServerConnection
   where
     loop :: ProtocolM (ProtocolState proto) ()
@@ -85,7 +87,7 @@ reader proto port = do
                 mbRequester <- whoSentRq (getPortNumber port) (getMatchKey msg)
                 case mbRequester of
                   Nothing -> do
-                    $reportError "Late response receive for request #{}" (Single $ getMatchKey msg)
+                    $reportError "Late response receive for request #{}" (Single $ hex $ getMatchKey msg)
                     Metrics.increment "generator.requests.late"
                   Just requester -> sendWorker "generator" port (Just requester) msg
               else do
@@ -93,7 +95,8 @@ reader proto port = do
                   sendWorker "processor" port Nothing msg
 
     closeServerConnection :: ProtocolM (ProtocolState proto) ()
-    closeServerConnection =
+    closeServerConnection = do
+      $info "closing connection @{}" (Single $ show port)
       case port of
         ServerPort _ conn _ -> liftIO $ close conn
         _ -> return ()
@@ -102,6 +105,7 @@ writer :: forall proto. Protocol proto => proto -> ExtPort -> ProtocolM (Protoco
 writer proto port = do
     let portNumber = getPortNumber port
     self <- liftP getSelfPid
+    $debug "starting writer @{}: {}" (show port, show self)
     let name = "writer:" ++ show portNumber
     liftP $ register name self
     loop `finally` closeServerConnection
@@ -116,7 +120,8 @@ writer proto port = do
           liftIO $ writeMessage port frame msg
 
     closeServerConnection :: ProtocolM (ProtocolState proto) ()
-    closeServerConnection =
+    closeServerConnection = do
+      $info "closing connection @{}" (Single $ show port)
       case port of
         ServerPort _ conn _ -> liftIO $ close conn
         _ -> return ()
@@ -196,7 +201,7 @@ generator proto myIndex = do
   let myName = "generator:" ++ show myIndex
   liftP $ register myName self
 
-  $debug "starting generator #{}" (Single myIndex)
+  $debug "starting generator #{}: #{}" (myIndex, show self)
   forever $ do
     (enabled, targetRps) <- getGeneratorSettings
     -- liftIO $ putStrLn $ show enabled
@@ -204,25 +209,27 @@ generator proto myIndex = do
       then do
         delay <- calcGeneratorDelay targetRps
         liftIO $ threadDelay $ delay
-        Metrics.timed "generator.requests.duration" $ do
+        Metrics.timed "generator.requests.duration" (do
             request <- generateRq proto myIndex 
             let key = getMatchKey request
             sendWriter Nothing request
-            $debug "sent request #{}" (Single key)
+            $debug "sent request #{}" (Single $ hex key)
             mbResponse <- receiveResponse key :: ProtocolM (ProtocolState proto) (Maybe (ProtocolMessage proto))
             case mbResponse of
               Nothing -> do
-                $reportError "Timeout while waiting for response for request #{}" (Single key)
+                $reportError "Timeout while waiting for response for request #{}" (Single $ hex key)
                 Metrics.increment "generator.requests.timeouts"
               Just response -> do
                 when (getMatchKey response /= key) $
                     fail "Suddenly received incorrect reply"
-                $debug "response received: #{}" (Single $ getMatchKey response)
+                $debug "response received: #{}" (Single $ hex $ getMatchKey response)
                 if isRequestDeclinedResponse response
                   then do
                        Metrics.increment "generator.requests.declined"
-                       $debug "request declined: #{}" (Single $ getMatchKey response)
+                       $debug "request declined: #{}" (Single $ hex $ getMatchKey response)
                   else Metrics.increment "generator.requests.approved"
+            ) `catch` \(e :: SomeException) -> do
+                $reportError "Exception: {}" (Single $ show e)
       else
         liftIO $ threadDelay 1000
 
@@ -231,10 +238,10 @@ processor proto myIndex = do
   self <- liftP getSelfPid
   let myName = "processor:" ++ show myIndex
   liftP $ register myName self
-  $debug "starting processor worker #{}" (Single myIndex)
+  $debug "starting processor worker #{}: {}" (myIndex, show self)
   forever $ do
     (srcPort, request) <- liftP expect :: ProtocolM (ProtocolState proto) (PortNumber, ProtocolMessage proto)
-    $debug "request received: #{}" (Single $ getMatchKey request)
+    $debug "request received: #{}" (Single $ hex $ getMatchKey request)
     Metrics.timed "processor.requests.duration" $ do
       minDelay <- asksConfig pcProcessorMinDelay
       maxDelay <- asksConfig pcProcessorMaxDelay
@@ -242,7 +249,7 @@ processor proto myIndex = do
       liftIO $ threadDelay $ delay * 1000
       response <- processRq proto request
       sendWriter (Just srcPort) response
-      $debug "response sent: #{}" (Single $ getMatchKey response)
+      $debug "response sent: #{}" (Single $ hex $ getMatchKey response)
 
 repl :: ProtocolM st ()
 repl = do
@@ -268,6 +275,17 @@ repl = do
       liftIO $ putStrLn "unknown command"
       repl
 
+watcher :: Process ()
+watcher = forever $ do
+  receiveWait [
+      match monitorEvent
+    ]
+  where
+    monitorEvent :: ProcessMonitorNotification -> Process ()
+    monitorEvent (ProcessMonitorNotification ref pid reason) = do
+      say $ "Process exited: " ++ show pid ++ ": " ++ show reason
+      
+
 runSite :: Protocol proto
         => Bool            -- ^ True for client side, False for server side
         -> proto
@@ -288,7 +306,7 @@ runSite isClient proto settings metrics cfg = do
     let st0 = initialState settings
         st = ProcessState [] metrics cfg (pcGeneratorEnabled cfg) 1000 (pcGeneratorTargetRps cfg) rps st0
 
-    spawnLocal $ logWriter (defaultLogSettings cfg)
+    link =<< (spawnLocal $ logWriter (defaultLogSettings cfg))
     myName <- liftIO getProgName
 
     runAProcess st $ withLogVariable "process" myName $ do
@@ -303,8 +321,9 @@ runSite isClient proto settings metrics cfg = do
         isProcessor <- asksConfig pcIsProcessor
         matcherTimeout <- asksConfig pcMatcherTimeout
         when isProcessor $ do
-          forM_ [0 .. nWorkers-1] $ \idx ->
-              spawnAProcess "processor" idx $ processor proto idx
+          forM_ [0 .. nWorkers-1] $ \idx -> do
+              p <- spawnAProcess "processor" idx $ processor proto idx
+              lift $ monitor p
 
         liftIO $ threadDelay $ 100*1000
           
@@ -312,22 +331,25 @@ runSite isClient proto settings metrics cfg = do
             spawnAProcess "port" portNumber $ connector (pcHost cfg) portNumber $ \extPort -> do
               let portNumber = getPortNumber extPort
               m <- lift $ spawnLocal (matcher portNumber matcherTimeout)
-              lift $ link m
+              lift $ monitor m
               w <- spawnAProcess "writer" portNumber (writer proto extPort)
-              lift $ link w
+              lift $ monitor w
               $debug "{} spawned writer" (Single myName)
               r <- spawnAProcess "reader" portNumber (reader proto extPort)
-              lift $ link r
+              lift $ monitor r
               $debug "{} spawned reader" (Single myName)
+              lift watcher
               return ()
 
         liftIO $ threadDelay $ 100*1000
 
         $debug "hello" ()
         when isGenerator $ do
-          forM_ [0 .. nWorkers-1] $ \idx ->
-              spawnAProcess "generator" idx $ generator proto idx
+          forM_ [0 .. nWorkers-1] $ \idx -> do
+              g <- spawnAProcess "generator" idx $ generator proto idx
+              lift $ monitor g
 
+        -- lift watcher
         return ()
 
     if pcUseRepl cfg
