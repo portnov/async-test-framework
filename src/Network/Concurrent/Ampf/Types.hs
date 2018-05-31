@@ -8,6 +8,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE DefaultSignatures #-}
 
 module Network.Concurrent.Ampf.Types where
 
@@ -21,8 +22,10 @@ import qualified Data.Text.Lazy as TL
 import Data.Typeable
 import Data.Binary
 import Data.Int
+import Data.String
 import Data.IORef
 import qualified Data.ByteString.Lazy as L
+import qualified Data.ByteString.Builder as Builder
 import Network.Socket
 import System.Log.Heavy
 import System.Log.Heavy.Instances.Binary () -- import instances only
@@ -45,11 +48,24 @@ class (Binary m, Typeable m) => IsMessage m where
   isAdministrative :: m -> Bool
   getMatchKey :: m -> MatchKey
 
+  showKey :: m -> MatchKey
+  showKey m = hex (getMatchKey m)
+
   isRequestDeclinedResponse :: m -> Bool
   isRequestDeclinedResponse m = not (isRequestApprovedResponse m)
 
   isRequestApprovedResponse :: m -> Bool
   isRequestApprovedResponse m = not (isRequestDeclinedResponse m)
+
+  showFull :: m -> L.ByteString
+  default showFull :: (Show m, IsMessage m) => m -> L.ByteString
+  showFull m = fromString (show m)
+
+  showMasked :: m -> L.ByteString
+  showMasked = showFull
+
+hex :: L.ByteString -> L.ByteString
+hex str = Builder.toLazyByteString $ Builder.lazyByteStringHex str
 
 class IsFrame f where
   recvMessage :: IsMessage m => Socket -> f -> IO m

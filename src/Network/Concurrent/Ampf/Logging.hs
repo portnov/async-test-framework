@@ -19,6 +19,7 @@ import System.Log.Heavy
 import System.Log.Heavy.TH ()
 
 import Network.Concurrent.Ampf.Types
+import Network.Concurrent.Ampf.Config
 
 defaultLogSettings :: ProcessConfig -> LogBackendSettings (Filtering FastLoggerBackend) 
 defaultLogSettings cfg =
@@ -60,6 +61,18 @@ debug = putMessage debug_level
 --
 info :: Q Exp
 info = putMessage info_level
+
+event :: Q Exp
+event = putMessage event_level
+
+traceConfig :: Q Exp
+traceConfig = putMessage config_level
+
+traceVerbose :: Q Exp
+traceVerbose = putMessage verbose_level
+
+traceSensitive :: Q Exp
+traceSensitive = putMessage sensitive_level
 
 -- | TH macro to log a message with WARN level. Usage:
 --

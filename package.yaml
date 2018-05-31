@@ -50,6 +50,7 @@ dependencies:
 - yaml
 - aeson
 - unordered-containers
+- hsyslog
 
 executables:
   async-exe:

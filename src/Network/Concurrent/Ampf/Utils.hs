@@ -3,9 +3,6 @@
 
 module Network.Concurrent.Ampf.Utils where
 
-import qualified Data.ByteString as B
-import qualified Data.ByteString.Lazy as L
-import qualified Data.ByteString.Builder as Builder
 import Network.Concurrent.Ampf.Types
 
 getAllWriterNames :: ProcessMonad m => m [String]
@@ -28,7 +25,4 @@ getAllGeneratorNames :: ProcessMonad m => m [String]
 getAllGeneratorNames = do
   count <- asksConfig pcWorkersCount
   return ["generator:" ++ show i | i <- [0 .. count-1]]
-
-hex :: L.ByteString -> L.ByteString
-hex str = Builder.toLazyByteString $ Builder.lazyByteStringHex str
 

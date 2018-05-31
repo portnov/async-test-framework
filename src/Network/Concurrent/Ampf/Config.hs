@@ -8,7 +8,7 @@ import Data.Yaml
 import Data.Word
 import Network.Socket
 import System.Log.Heavy
--- import qualified System.Posix.Syslog as Syslog
+import qualified System.Posix.Syslog as Syslog
 
 import Network.Concurrent.Ampf.Types
 
@@ -36,16 +36,20 @@ instance FromJSON PortNumber where
   parseJSON o = fromIntegral `fmap` (parseJSON o :: Parser Word16)
 
 -- | EVENT logging level
--- event_level :: Level
--- event_level = Level "EVENT" 350 Syslog.Info
+event_level :: Level
+event_level = Level "EVENT" 350 Syslog.Info
 
 -- | VERBOSE logging level
--- verbose_level :: Level
--- verbose_level = Level "VERBOSE" 450 Syslog.Info
+verbose_level :: Level
+verbose_level = Level "VERBOSE" 450 Syslog.Info
 
 -- | CONFIG logging level
--- config_level :: Level
--- config_level = Level "CONFIG" 700 Syslog.Debug
+config_level :: Level
+config_level = Level "CONFIG" 700 Syslog.Debug
+
+-- | SENSITIVE logging level
+sensitive_level :: Level
+sensitive_level = Level "SENSITIVE" 800 Syslog.Debug
 
 instance FromJSON Level where
   parseJSON (Aeson.String "debug") = return debug_level
@@ -53,6 +57,10 @@ instance FromJSON Level where
   parseJSON (Aeson.String "warning") = return warn_level
   parseJSON (Aeson.String "error") = return error_level
   parseJSON (Aeson.String "fatal") = return fatal_level
+  parseJSON (Aeson.String "event") = return event_level
+  parseJSON (Aeson.String "verbose") = return verbose_level
+  parseJSON (Aeson.String "config") = return config_level
+  parseJSON (Aeson.String "sensitive") = return sensitive_level
   parseJSON (Aeson.String "disable") = return disable_logging
   parseJSON invalid = Aeson.typeMismatch "logging level" invalid
 

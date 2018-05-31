@@ -31,7 +31,6 @@ import Network.Concurrent.Ampf.Types
 import Network.Concurrent.Ampf.Connection
 import Network.Concurrent.Ampf.Logging
 import Network.Concurrent.Ampf.Matcher
-import Network.Concurrent.Ampf.Utils
 import Network.Concurrent.Ampf.Monitoring (globalCollector)
 
 askPortsCount :: ProcessMonad m => m Int
@@ -81,13 +80,14 @@ reader proto port = do
     loop = forever $ do
             frame <- getFrame proto
             msg <- liftIO $ readMessage port frame :: ProtocolM (ProtocolState proto) (ProtocolMessage proto)
+            $traceSensitive "received message: {}" (Single $ showFull msg)
             if isResponse msg
               then do
                 Metrics.increment "reader.received.responses"
                 mbRequester <- whoSentRq (getPortNumber port) (getMatchKey msg)
                 case mbRequester of
                   Nothing -> do
-                    $reportError "Late response receive for request #{}" (Single $ hex $ getMatchKey msg)
+                    $reportError "Late response receive for request #{}" (Single $ showKey msg)
                     Metrics.increment "generator.requests.late"
                   Just requester -> sendWorker "generator" port (Just requester) msg
               else do
@@ -118,6 +118,7 @@ writer proto port = do
           Metrics.increment "writer.sent.messages"
           frame <- getFrame proto
           liftIO $ writeMessage port frame msg
+          $traceSensitive "sent message: {}" (Single $ showFull msg)
 
     closeServerConnection :: ProtocolM (ProtocolState proto) ()
     closeServerConnection = do
@@ -213,20 +214,20 @@ generator proto myIndex = do
             request <- generateRq proto myIndex 
             let key = getMatchKey request
             sendWriter Nothing request
-            $debug "sent request #{}" (Single $ hex key)
+            $debug "sent request #{}" (Single $ showKey request)
             mbResponse <- receiveResponse key :: ProtocolM (ProtocolState proto) (Maybe (ProtocolMessage proto))
             case mbResponse of
               Nothing -> do
-                $reportError "Timeout while waiting for response for request #{}" (Single $ hex key)
+                $reportError "Timeout while waiting for response for request #{}" (Single $ showKey request)
                 Metrics.increment "generator.requests.timeouts"
               Just response -> do
                 when (getMatchKey response /= key) $
                     fail "Suddenly received incorrect reply"
-                $debug "response received: #{}" (Single $ hex $ getMatchKey response)
+                $debug "response received: #{}" (Single $ showKey response)
                 if isRequestDeclinedResponse response
                   then do
                        Metrics.increment "generator.requests.declined"
-                       $debug "request declined: #{}" (Single $ hex $ getMatchKey response)
+                       $debug "request declined: #{}" (Single $ showKey response)
                   else Metrics.increment "generator.requests.approved"
             ) `catch` \(e :: SomeException) -> do
                 $reportError "Exception: {}" (Single $ show e)
@@ -241,7 +242,7 @@ processor proto myIndex = do
   $debug "starting processor worker #{}: {}" (myIndex, show self)
   forever $ do
     (srcPort, request) <- liftP expect :: ProtocolM (ProtocolState proto) (PortNumber, ProtocolMessage proto)
-    $debug "request received: #{}" (Single $ hex $ getMatchKey request)
+    $debug "request received: #{}" (Single $ showKey request)
     Metrics.timed "processor.requests.duration" $ do
       minDelay <- asksConfig pcProcessorMinDelay
       maxDelay <- asksConfig pcProcessorMaxDelay
@@ -249,7 +250,7 @@ processor proto myIndex = do
       liftIO $ threadDelay $ delay * 1000
       response <- processRq proto request
       sendWriter (Just srcPort) response
-      $debug "response sent: #{}" (Single $ hex $ getMatchKey response)
+      $debug "response sent: #{}" (Single $ showKey response)
 
 repl :: ProtocolM st ()
 repl = do
