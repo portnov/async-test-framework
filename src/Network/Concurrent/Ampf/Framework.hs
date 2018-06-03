@@ -273,28 +273,33 @@ repl = do
     ["exit"] -> return ()
     ["quit"] -> return ()
     _ -> do
-      liftIO $ putStrLn "unknown command"
+      lift $ nsend "controller" (ReplCommand command)
       repl
 
-watcher :: Process ()
-watcher = forever $ do
-  receiveWait [
-      match monitorEvent
-    ]
+watcher :: forall proto. Protocol proto => proto -> ProtocolM (ProtocolState proto) ()
+watcher proto =
+  processMessages proto [
+      matchP proto monitorEvent
+  ]
   where
-    monitorEvent :: ProcessMonitorNotification -> Process ()
+    monitorEvent :: ProcessMonitorNotification -> ProtocolM (ProtocolState proto) ()
     monitorEvent (ProcessMonitorNotification ref pid reason) = do
-      say $ "Process exited: " ++ show pid ++ ": " ++ show reason
+      $reportError "Process exited: {}: {}" (show pid, show reason)
       
+controller :: Protocol proto => proto -> ProtocolM (ProtocolState proto) ()
+controller proto =
+  processMessages proto [
+    matchAnyP proto (\m -> processCommand proto m)
+  ]
+
 
 runSite :: Protocol proto
         => Bool            -- ^ True for client side, False for server side
-        -> proto
         -> ProtocolSettings proto
         -> Metrics.Metrics
         -> ProcessConfig
         -> Process ()
-runSite isClient proto settings metrics cfg = do
+runSite isClient settings metrics cfg = do
 
     let connector = if isClient
                       then clientConnection
@@ -305,15 +310,20 @@ runSite isClient proto settings metrics cfg = do
 
     rps <- liftIO $ newIORef (0,0)
     let st0 = initialState settings
-        st = ProcessState [] metrics cfg (pcGeneratorEnabled cfg) 1000 (pcGeneratorTargetRps cfg) rps st0
+        st = ThreadState [] metrics cfg (pcGeneratorEnabled cfg) 1000 (pcGeneratorTargetRps cfg) rps st0
 
     link =<< (spawnLocal $ logWriter (defaultLogSettings cfg))
     myName <- liftIO getProgName
 
-    runAProcess st $ withLogVariable "process" myName $ do
+    evalProtocolM st $ withLogVariable "process" myName $ do
+        proto <- initProtocol settings
         spawnAProcess "monitor" 0 $ do
             liftP $ register "monitor" =<< getSelfPid
             globalCollector
+
+        spawnAProcess "controller" 0 $ do
+            liftP $ register "controller" =<< getSelfPid
+            controller proto
 
         spawnAProcess "rps controller" 0 rpsController
 
@@ -339,7 +349,7 @@ runSite isClient proto settings metrics cfg = do
               r <- spawnAProcess "reader" portNumber (reader proto extPort)
               lift $ monitor r
               $debug "{} spawned reader" (Single myName)
-              lift watcher
+              watcher proto
               return ()
 
         liftIO $ threadDelay $ 100*1000
@@ -354,7 +364,7 @@ runSite isClient proto settings metrics cfg = do
         return ()
 
     if pcUseRepl cfg
-      then runAProcess st $ withLogVariable "process" ("repl" :: String) repl
+      then evalProtocolM st $ withLogVariable "process" ("repl" :: String) repl
       else liftIO $ do
         putStrLn "press return to exit..."
         getLine

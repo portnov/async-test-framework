@@ -16,6 +16,7 @@ import Control.Monad.Reader
 import Control.Monad.State as St
 import Control.Monad.Catch 
 import Control.Distributed.Process hiding (bracket, mask, catch)
+import Control.Distributed.Process.Serializable
 import qualified Control.Monad.Metrics as Metrics
 import qualified Data.Map as M
 import qualified Data.Text.Lazy as TL
@@ -42,6 +43,11 @@ data MatcherStats = MatcherStats Int
   deriving (Typeable, Generic)
 
 instance Binary MatcherStats
+
+data ReplCommand = ReplCommand String
+  deriving (Typeable, Generic)
+
+instance Binary ReplCommand
 
 class (Binary m, Typeable m) => IsMessage m where
   isResponse :: m -> Bool
@@ -85,15 +91,17 @@ class (IsFrame (ProtocolFrame proto), IsMessage (ProtocolMessage proto))
 
   getFrame :: proto -> ProtocolM (ProtocolState proto) (ProtocolFrame proto)
 
-  -- initProtocol :: ProtocolSettings proto -> ProtocolM (ProtocolState proto) ()
+  initProtocol :: ProtocolSettings proto -> ProtocolM (ProtocolState proto) proto
 
   initialState :: ProtocolSettings proto -> ProtocolState proto
-
-  makeLogonMsg :: proto -> ProtocolM (ProtocolState proto) (ProtocolMessage proto)
 
   generateRq :: proto -> Int -> ProtocolM (ProtocolState proto) (ProtocolMessage proto)
 
   processRq :: proto -> ProtocolMessage proto -> ProtocolM (ProtocolState proto) (ProtocolMessage proto)
+
+  processCommand :: proto -> Message -> ProtocolM (ProtocolState proto) ()
+  processCommand _ _ = return ()
+
 
 data PoolSettings = PoolSettings {
     pIsClient :: Bool
@@ -180,7 +188,7 @@ class HasLoggingSettings backend cfg where
   getLoggingSettings :: cfg -> LogBackendSettings backend
 
 -- this is ProtocolM-specific
-data ProcessState st = ProcessState {
+data ThreadState st = ThreadState {
     psContext :: LogContext,
     psMetrics :: Metrics.Metrics,
     psConfig :: ProcessConfig,
@@ -199,7 +207,7 @@ data GeneratorCommand =
 
 instance Binary GeneratorCommand
 
-type ProtocolM st a = StateT (ProcessState st) Process a
+type ProtocolM st a = StateT (ThreadState st) Process a
 
 getP :: ProtocolM st st
 getP = gets psState
@@ -207,7 +215,7 @@ getP = gets psState
 putP :: st -> ProtocolM st ()
 putP x = modify $ \st -> st {psState = x}
 
-instance HasLogContext (StateT (ProcessState st) Process) where
+instance HasLogContext (StateT (ThreadState st) Process) where
   getLogContext = gets psContext
 
   withLogContext frame actions = do
@@ -218,10 +226,10 @@ instance HasLogContext (StateT (ProcessState st) Process) where
     modify $ \cfg -> cfg {psContext = context}
     return result
 
-instance Metrics.MonadMetrics (StateT (ProcessState st) Process) where
+instance Metrics.MonadMetrics (StateT (ThreadState st) Process) where
   getMetrics = gets psMetrics
 
-instance ProcessMonad (StateT (ProcessState st) Process) where
+instance ProcessMonad (StateT (ThreadState st) Process) where
   liftP = lift
 
   askConfig = gets psConfig
@@ -236,12 +244,27 @@ spawnAProcess name idx proc = do
     cfg <- St.get
     lift $ spawnLocal $ do
              self <- getSelfPid
-             runAProcess cfg $ withContext self proc
+             evalProtocolM cfg $ withContext self proc
   where
     withContext pid =
           withLogVariable "pid" (show pid) .
           withLogVariable "thread" name .
           withLogVariable "index" (show idx)
+
+type MatchP proto a = ThreadState (ProtocolState proto) -> Match (a, ThreadState (ProtocolState proto))
+
+matchP :: (Protocol proto, Serializable a) => proto -> (a -> ProtocolM (ProtocolState proto) b) -> MatchP proto b
+matchP proto handler st = match (\m -> runProtocolM st $ handler m)
+
+matchAnyP :: (Protocol proto) => proto -> (Message -> ProtocolM (ProtocolState proto) b) -> MatchP proto b
+matchAnyP proto handler st = matchAny (\m -> runProtocolM st $ handler m)
+
+processMessages :: Protocol proto => proto -> [MatchP proto a] -> ProtocolM (ProtocolState proto) ()
+processMessages _ handlers = St.get >>= go
+  where
+    go st = do
+      (a, st) <- liftP $ receiveWait [handler st | handler <- handlers]
+      go st
 
 -- spawnAProcess :: forall m idx. (MonadBaseControl Process m, HasLogContext m, Show idx) => String -> idx -> m () -> m ProcessId
 -- spawnAProcess name idx proc = do
@@ -267,6 +290,9 @@ spawnAProcess name idx proc = do
 --           withLogVariable "thread" name .
 --           withLogVariable "index" (show idx)
     
-runAProcess :: ProcessState st -> ProtocolM st () -> Process ()
-runAProcess cfg proc = evalStateT proc cfg
+evalProtocolM :: ThreadState st -> ProtocolM st () -> Process ()
+evalProtocolM cfg proc = evalStateT proc cfg
+
+runProtocolM :: ThreadState st -> ProtocolM st a -> Process (a, ThreadState st)
+runProtocolM cfg proc = runStateT proc cfg
 

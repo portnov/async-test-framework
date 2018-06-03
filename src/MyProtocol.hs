@@ -38,11 +38,11 @@ instance Protocol MyProtocol where
 
   getFrame _ = return LeadingSize
 
-  -- initProtocol (MySettings key) = putP key
+  initProtocol (MySettings key) = do
+    putP key
+    return MyProtocol
 
   initialState (MySettings key) = key
-
-  makeLogonMsg _ = return $ MyMessage False 0 "logon"
 
   generateRq _ myIndex = do
     key <- getP
@@ -70,7 +70,7 @@ runClient metrics cfg = do
   node <- newLocalNode transport initRemoteTable
 
   runProcess node $ do
-    runSite True MyProtocol (MySettings 100) metrics cfg
+    runSite True (MySettings 100) metrics cfg
 
   return ()
 
@@ -80,7 +80,7 @@ runServer metrics cfg = do
   node <- newLocalNode transport initRemoteTable
 
   runProcess node $ do
-    runSite False MyProtocol (MySettings 200) metrics cfg
+    runSite False (MySettings 200) metrics cfg
 
   return ()
     
