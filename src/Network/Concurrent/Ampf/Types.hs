@@ -102,6 +102,9 @@ class (IsFrame (ProtocolFrame proto), IsMessage (ProtocolMessage proto))
   processCommand :: proto -> Message -> ProtocolM (ProtocolState proto) ()
   processCommand _ _ = return ()
 
+  onStartupCompleted :: proto -> ProtocolM (ProtocolState proto) ()
+  onStartupCompleted _ = return ()
+
 
 data PoolSettings = PoolSettings {
     pIsClient :: Bool
@@ -211,6 +214,9 @@ type ProtocolM st a = StateT (ThreadState st) Process a
 
 getP :: ProtocolM st st
 getP = gets psState
+
+getsP :: (st -> a) -> ProtocolM st a
+getsP fn = gets (fn . psState)
 
 putP :: st -> ProtocolM st ()
 putP x = modify $ \st -> st {psState = x}

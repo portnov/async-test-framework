@@ -360,6 +360,8 @@ runSite isClient settings metrics cfg = do
               g <- spawnAProcess "generator" idx $ generator proto idx
               lift $ monitor g
 
+        onStartupCompleted proto
+
         -- lift watcher
         return ()
 
