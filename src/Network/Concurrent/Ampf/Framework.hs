@@ -41,12 +41,12 @@ askPortsCount = do
   return $ fromIntegral $ maxPort - minPort + 1
 
 sendWorker :: (ProcessMonad m, IsMessage msg) => String -> ExtPort -> Maybe ProcessId -> msg -> m ()
-sendWorker workerType srcPort Nothing msg = do
+sendWorker workerType srcPort Nothing msg = Metrics.timed "reader.sending.duration" $ do
   count <- asksConfig pcWorkersCount
   idx <- liftIO $ randomRIO (0, count-1)
   let name = workerType ++ ":" ++ show idx
   liftP $ nsendCapable name (getPortNumber srcPort, msg)
-sendWorker _ srcPort (Just worker) msg = do
+sendWorker _ srcPort (Just worker) msg = Metrics.timed "reader.sending.duration" $ do
   liftP $ send worker (getPortNumber srcPort, msg)
 
 sendAllGenerators :: (Binary msg, Typeable msg, ProcessMonad m) => msg -> m ()
@@ -66,13 +66,12 @@ sendWriter mbPort msg = do
               let count = fromIntegral $ maxPort - minPort + 1
               idx <- liftIO $ randomRIO (0, count-1)
               return $ minPort + fromIntegral (idx :: Int)
-  when (not $ isResponse msg) $ do
-      registerRq port (getMatchKey msg)
   let name = "writer:" ++ show port
-  liftP $ nsendCapable name msg
+  self <- liftP getSelfPid
+  liftP $ nsendCapable name (self, msg)
 
-reader :: forall proto. Protocol proto => proto -> ExtPort -> ProtocolM (ProtocolState proto) ()
-reader proto port = do
+reader :: forall proto. Protocol proto => proto -> MatcherState -> ExtPort -> ProtocolM (ProtocolState proto) ()
+reader proto matcherState port = do
     self <- liftP getSelfPid
     $debug "starting reader @{}: {}" (show port, show self)
     loop `finally` closeServerConnection
@@ -86,7 +85,7 @@ reader proto port = do
             if isResponse msg
               then do
                 Metrics.increment "reader.received.responses"
-                mbRequester <- whoSentRq (getPortNumber port) (getMatchKey msg)
+                mbRequester <- whoSentRq matcherState (getPortNumber port) (getMatchKey msg)
                 case mbRequester of
                   Nothing -> do
                     $reportError "Late response receive for request #{}" (Single $ showKey msg)
@@ -103,8 +102,8 @@ reader proto port = do
         ServerPort _ conn _ -> liftIO $ close conn
         _ -> return ()
 
-writer :: forall proto. Protocol proto => proto -> ExtPort -> ProtocolM (ProtocolState proto) ()
-writer proto port = do
+writer :: forall proto. Protocol proto => proto -> MatcherState -> ExtPort -> ProtocolM (ProtocolState proto) ()
+writer proto matcherState port = do
     let portNumber = getPortNumber port
     self <- liftP getSelfPid
     $debug "starting writer @{}: {}" (show port, show self)
@@ -115,8 +114,10 @@ writer proto port = do
     loop :: ProtocolM (ProtocolState proto) ()
     loop =
         forever $ Metrics.timed "writer.processing.duration" $ do
-          msg <- liftP expect :: ProtocolM (ProtocolState proto) (ProtocolMessage proto)
+          (sender, msg) <- liftP expect :: ProtocolM (ProtocolState proto) (ProcessId, ProtocolMessage proto)
           Metrics.increment "writer.sent.messages"
+          unless (isResponse msg) $
+              registerRq matcherState (getPortNumber port) (getMatchKey msg) sender
           frame <- getFrame proto
           Metrics.timed "writer.sending.duration" $
               liftIO $ writeMessage port frame msg
@@ -335,7 +336,6 @@ runSite isClient settings metrics cfg = do
         isGenerator <- asksConfig pcIsGenerator
         isProcessor <- asksConfig pcIsProcessor
         isExtPort <- asksConfig pcIsPort
-        matcherTimeout <- asksConfig pcMatcherTimeout
         when isProcessor $ do
           forM_ [0 .. nWorkers-1] $ \idx -> do
               p <- spawnAProcess "processor" idx $ processor proto idx
@@ -347,12 +347,11 @@ runSite isClient settings metrics cfg = do
           forM_ [minPort .. maxPort] $ \portNumber -> do
               spawnAProcess "port" portNumber $ connector (pcHost cfg) portNumber $ \extPort -> do
                 let portNumber = getPortNumber extPort
-                m <- lift $ spawnLocal (matcher portNumber matcherTimeout)
-                lift $ monitor m
-                w <- spawnAProcess "writer" portNumber (writer proto extPort)
+                matcherState <- liftP $ matcher portNumber
+                w <- spawnAProcess "writer" portNumber (writer proto matcherState extPort)
                 lift $ monitor w
                 $debug "{} spawned writer" (Single myName)
-                r <- spawnAProcess "reader" portNumber (reader proto extPort)
+                r <- spawnAProcess "reader" portNumber (reader proto matcherState extPort)
                 lift $ monitor r
                 $debug "{} spawned reader" (Single myName)
                 watcher proto
