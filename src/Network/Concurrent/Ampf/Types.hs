@@ -133,6 +133,10 @@ instance Binary PortNumber
 data ProcessConfig = ProcessConfig {
     pcIsGenerator :: Bool,
     pcIsProcessor :: Bool,
+    pcIsPort :: Bool,
+    pcIsClient :: Bool,
+    pcControlPort :: PortNumber,
+    pcPeers :: [String],
     pcGeneratorEnabled :: Bool,
     pcGeneratorTargetRps :: Int,
     pcHost :: String,

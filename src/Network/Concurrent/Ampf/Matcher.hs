@@ -9,6 +9,7 @@ import Control.Monad
 import Control.Monad.Reader hiding (reader)
 import Control.Concurrent
 import Control.Distributed.Process hiding (bracket, finally)
+import Control.Distributed.Backend.P2P
 import qualified Control.Monad.Metrics as Metrics
 import Data.Binary
 import qualified Data.Map as M
@@ -88,7 +89,7 @@ matcher port timeout = do
           in (m', ())
       newSize <- liftIO $ M.size `fmap` readIORef st
       -- liftIO $ putStrLn $ show (oldSize - newSize)
-      nsend "monitor" (MatcherStats newSize) 
+      nsendCapable "monitor" (MatcherStats newSize) 
 
 registerRq :: ProcessMonad m => PortNumber -> MatchKey -> m ()
 registerRq port key = do
@@ -96,12 +97,12 @@ registerRq port key = do
   Metrics.timed "matcher.registration.duration" $ do
     self <- liftP getSelfPid
     let name = "matcher:" ++ show port
-    liftP $ nsend name (RegisterRq self key)
+    liftP $ nsendCapable name (RegisterRq self key)
 
 whoSentRq :: ProcessMonad m => PortNumber -> MatchKey -> m (Maybe ProcessId)
 whoSentRq port key = Metrics.timed "matcher.request.duration" $ do
   self <- liftP getSelfPid
   let name = "matcher:" ++ show port
-  liftP $ nsend name (WhoSentRq self key)
+  liftP $ nsendCapable name (WhoSentRq self key)
   liftP expect
 

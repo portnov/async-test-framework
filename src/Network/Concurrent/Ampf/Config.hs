@@ -16,6 +16,10 @@ instance FromJSON ProcessConfig where
   parseJSON = withObject "Config" $ \v -> ProcessConfig
     <$> v .: "is-generator"
     <*> v .: "is-processor"
+    <*> v .: "is-external-port" 
+    <*> v .: "is-client" 
+    <*> v .:? "control-port" .!= 10501
+    <*> v .:? "peers" .!= []
     <*> v .:? "generator-enabled" .!= False
     <*> v .:? "generator-target-rps" .!= 100
     <*> v .:? "host" .!= "127.0.0.1"

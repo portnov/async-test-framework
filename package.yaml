@@ -33,6 +33,7 @@ dependencies:
 - template-haskell >= 2.12.0.0
 - th-lift
 - distributed-process
+- distributed-process-p2p
 - distributed-process-monad-control
 - lifted-base
 - network-transport-tcp

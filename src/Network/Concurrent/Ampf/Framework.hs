@@ -13,6 +13,7 @@ import Control.Monad.State as St
 import Control.Monad.Catch (catch, finally, SomeException)
 import Control.Concurrent
 import Control.Distributed.Process hiding (bracket, finally, catch)
+import Control.Distributed.Backend.P2P
 import qualified Control.Monad.Metrics as Metrics
 import Data.Typeable
 import Data.Binary
@@ -44,7 +45,7 @@ sendWorker workerType srcPort Nothing msg = do
   count <- asksConfig pcWorkersCount
   idx <- liftIO $ randomRIO (0, count-1)
   let name = workerType ++ ":" ++ show idx
-  liftP $ nsend name (getPortNumber srcPort, msg)
+  liftP $ nsendCapable name (getPortNumber srcPort, msg)
 sendWorker _ srcPort (Just worker) msg = do
   liftP $ send worker (getPortNumber srcPort, msg)
 
@@ -53,7 +54,7 @@ sendAllGenerators msg = do
   count <- asksConfig pcWorkersCount
   forM_ [0 .. count-1] $ \idx -> do
     let name = "generator:" ++ show idx
-    liftP $ nsend name msg
+    liftP $ nsendCapable name msg
 
 sendWriter :: (ProcessMonad m, IsMessage msg) => Maybe PortNumber -> msg -> m ()
 sendWriter mbPort msg = do
@@ -68,7 +69,7 @@ sendWriter mbPort msg = do
   when (not $ isResponse msg) $ do
       registerRq port (getMatchKey msg)
   let name = "writer:" ++ show port
-  liftP $ nsend name msg
+  liftP $ nsendCapable name msg
 
 reader :: forall proto. Protocol proto => proto -> ExtPort -> ProtocolM (ProtocolState proto) ()
 reader proto port = do
@@ -330,6 +331,7 @@ runSite isClient settings metrics cfg = do
         nWorkers <- asksConfig pcWorkersCount
         isGenerator <- asksConfig pcIsGenerator
         isProcessor <- asksConfig pcIsProcessor
+        isExtPort <- asksConfig pcIsPort
         matcherTimeout <- asksConfig pcMatcherTimeout
         when isProcessor $ do
           forM_ [0 .. nWorkers-1] $ \idx -> do
@@ -338,21 +340,23 @@ runSite isClient settings metrics cfg = do
 
         liftIO $ threadDelay $ 100*1000
           
-        forM_ [minPort .. maxPort] $ \portNumber -> do
-            spawnAProcess "port" portNumber $ connector (pcHost cfg) portNumber $ \extPort -> do
-              let portNumber = getPortNumber extPort
-              m <- lift $ spawnLocal (matcher portNumber matcherTimeout)
-              lift $ monitor m
-              w <- spawnAProcess "writer" portNumber (writer proto extPort)
-              lift $ monitor w
-              $debug "{} spawned writer" (Single myName)
-              r <- spawnAProcess "reader" portNumber (reader proto extPort)
-              lift $ monitor r
-              $debug "{} spawned reader" (Single myName)
-              watcher proto
-              return ()
+        when isExtPort $ do
+          forM_ [minPort .. maxPort] $ \portNumber -> do
+              spawnAProcess "port" portNumber $ connector (pcHost cfg) portNumber $ \extPort -> do
+                let portNumber = getPortNumber extPort
+                m <- lift $ spawnLocal (matcher portNumber matcherTimeout)
+                lift $ monitor m
+                w <- spawnAProcess "writer" portNumber (writer proto extPort)
+                lift $ monitor w
+                $debug "{} spawned writer" (Single myName)
+                r <- spawnAProcess "reader" portNumber (reader proto extPort)
+                lift $ monitor r
+                $debug "{} spawned reader" (Single myName)
+                watcher proto
+                return ()
 
-        liftIO $ threadDelay $ 100*1000
+          liftIO $ threadDelay $ 100*1000
+          return ()
 
         $debug "hello" ()
         when isGenerator $ do
