@@ -78,9 +78,10 @@ reader proto port = do
     loop `finally` closeServerConnection
   where
     loop :: ProtocolM (ProtocolState proto) ()
-    loop = forever $ do
+    loop = forever $ Metrics.timed "reader.processing.duration" $ do
             frame <- getFrame proto
-            msg <- liftIO $ readMessage port frame :: ProtocolM (ProtocolState proto) (ProtocolMessage proto)
+            msg <- Metrics.timed "reader.receiving.duration" $
+                      liftIO $ readMessage port frame :: ProtocolM (ProtocolState proto) (ProtocolMessage proto)
             $traceSensitive "received message: {}" (Single $ showFull msg)
             if isResponse msg
               then do
@@ -113,12 +114,12 @@ writer proto port = do
   where
     loop :: ProtocolM (ProtocolState proto) ()
     loop =
-        forever $ do
-          -- $ debug "hello from writer: {}" (Single $ show port)
+        forever $ Metrics.timed "writer.processing.duration" $ do
           msg <- liftP expect :: ProtocolM (ProtocolState proto) (ProtocolMessage proto)
           Metrics.increment "writer.sent.messages"
           frame <- getFrame proto
-          liftIO $ writeMessage port frame msg
+          Metrics.timed "writer.sending.duration" $
+              liftIO $ writeMessage port frame msg
           $traceSensitive "sent message: {}" (Single $ showFull msg)
 
     closeServerConnection :: ProtocolM (ProtocolState proto) ()
@@ -242,9 +243,11 @@ processor proto myIndex = do
   liftP $ register myName self
   $debug "starting processor worker #{}: {}" (myIndex, show self)
   forever $ do
-    (srcPort, request) <- liftP expect :: ProtocolM (ProtocolState proto) (PortNumber, ProtocolMessage proto)
-    $debug "request received: #{}" (Single $ showKey request)
+    (srcPort, request) <-
+      Metrics.timed "processor.requests.expecting" $
+          liftP expect :: ProtocolM (ProtocolState proto) (PortNumber, ProtocolMessage proto)
     Metrics.timed "processor.requests.duration" $ do
+      $debug "request received: #{}" (Single $ showKey request)
       minDelay <- asksConfig pcProcessorMinDelay
       maxDelay <- asksConfig pcProcessorMaxDelay
       delay <- liftIO $ randomRIO (minDelay, maxDelay)

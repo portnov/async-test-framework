@@ -43,7 +43,8 @@ globalCollector = do
     metrics <- Metrics.getMetrics
     let store = metrics ^. Metrics.metricsStore
     writerMailboxSize <- liftIO $ EKG.createGauge "writer.mailbox.size" store
-    workerMailboxSize <- liftIO $ EKG.createGauge "processor.mailbox.size" store
+    processorMailboxSize <- liftIO $ EKG.createGauge "processor.mailbox.size" store
+    generatorMailboxSize <- liftIO $ EKG.createGauge "generator.mailbox.size" store
     matcherSizeDistrib <- liftIO $ EKG.createDistribution "matcher.registration.size" store
     forever $ do
       delay <- asksConfig pcMonitorDelay
@@ -51,12 +52,12 @@ globalCollector = do
       liftP $ receiveWait [
                 match (matcherSize matcherSizeDistrib)
               ]
-      writerNames <- getAllWriterNames
-      writersSize <- collectQueueSize writerNames
+      writersSize <- collectQueueSize =<< getAllWriterNames
       liftIO $ Gauge.set writerMailboxSize writersSize
-      workerNames <- getAllProcessorNames
-      workersSize <- collectQueueSize workerNames
-      liftIO $ Gauge.set workerMailboxSize workersSize
+      processorsSize <- collectQueueSize =<< getAllProcessorNames
+      liftIO $ Gauge.set processorMailboxSize processorsSize
+      generatorsSize <- collectQueueSize =<< getAllGeneratorNames
+      liftIO $ Gauge.set generatorMailboxSize generatorsSize
 
   where
     matcherSize :: Distribution.Distribution -> MatcherStats -> Process ()
