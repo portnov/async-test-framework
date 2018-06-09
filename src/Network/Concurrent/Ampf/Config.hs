@@ -20,6 +20,7 @@ instance FromJSON ProcessConfig where
     <*> v .: "is-client" 
     <*> v .:? "control-port" .!= 10501
     <*> v .:? "peers" .!= []
+    <*> v .:? "peers-wait-delay" .!= 5
     <*> v .:? "generator-enabled" .!= False
     <*> v .:? "generator-target-rps" .!= 100
     <*> v .:? "host" .!= "127.0.0.1"

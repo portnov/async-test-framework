@@ -59,6 +59,14 @@ globalCollector = do
       generatorsSize <- collectQueueSize =<< getAllGeneratorNames
       liftIO $ Gauge.set generatorMailboxSize generatorsSize
 
+--       sample <- liftIO $ EKG.sampleAll store
+--       case H.lookup "writer.sent.messages" sample of
+--         Nothing -> return ()
+--         Just (EKG.Counter currentCount) -> do
+--           st <- gets psRpsStats
+--           nsendCapable "rps controller" 
+--           liftIO $ modifyIORef st $ \(prev,last) -> (last, currentCount)
+
   where
     matcherSize :: Distribution.Distribution -> MatcherStats -> Process ()
     matcherSize distrib (MatcherStats size) = do

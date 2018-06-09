@@ -137,6 +137,7 @@ data ProcessConfig = ProcessConfig {
     pcIsClient :: Bool,
     pcControlPort :: PortNumber,
     pcPeers :: [String],
+    pcPeersWaitDelay :: Int,
     pcGeneratorEnabled :: Bool,
     pcGeneratorTargetRps :: Int,
     pcHost :: String,
